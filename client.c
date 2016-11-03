@@ -141,6 +141,17 @@ void echo_client(int fd) {
  */
 void put_file(int fd, char *put_name) {
     /* TODO: implement a proper solution, instead of calling the echo() client */
+  //beggining of added code just my initial ideas so far
+  File * my_file;
+  char client_buffer[256];
+  my_file=fopen(put_name, "r");
+  fscanf(my_file,"%s",client_buffer);
+  write(fd,client_buffer,256);
+  printf(" %s was successfully sent",put_name);
+
+
+
+	 //end of added code
     echo_client(fd);
 }
 
