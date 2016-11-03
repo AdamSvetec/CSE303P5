@@ -1,0 +1,147 @@
+CSE303 - Fall 2015
+Assignment #6: Security and Resource Management
+
+Purpose and General Guidelines:
+
+  In this assignment, we will gain familiarity with concepts in security and
+  resource management, while also demonstrating more ability with the tasks
+  we've already discussed this semester.
+
+Getting Started
+
+  We provide a tar file with starter code at
+  /proj/spear0/cse303/cse303_p5.tgz.  As in previous assignments, this code
+  has several files, which contain incomplete functions.  You must complete
+  the functions in the files to satisfy the requirements of the assignment.
+
+  By default, the starter code will allow the client to interact with the
+  server via stdin.  Messages sent from the client will be reported server
+  side and will be echoed back to the client who will output that message
+  back.  You can use this behavior to control directly what the server is
+  sent for testing purposes.  You may want to keep a copy of this basic
+  client around.
+
+Task #0: Tell us who you are
+
+  You should edit the 'team.c' file to provide your name and email address.
+  Until you do this, none of your programs will execute.  Note that you may
+  work in teams of two.
+
+Task #1: Implement a networked "file server"
+
+  In this task, you are required to modify the client.c and server.c files,
+  so that they provide the basic functionality described in the code.  That
+  is, client should be able to send files to the server, where they are
+  stored, and it should also be able to retrieve those files, by name, from
+  the server.
+
+  To get this to work, you will need a protocol for how the two sides
+  interact.  For now, the protocol will consist of the following messages:
+
+    To PUT a file:
+      Client sends:
+        PUT\n
+        filename\n
+        # bytes\n
+        file contents\n
+      Server sends:
+        OK\n
+       or
+        <<Some one-line error message>>\n
+
+    To GET a file:
+      Client sends:
+        GET\n
+        filename\n
+      Server sends:
+        <<Some one-line error message>>\n
+       or
+        OK\n
+        filename\n
+        # bytes\n
+        file contents\n
+
+    Note that each line should end with a newline, except for file contents,
+    which will be a raw byte stream (be wary of strlen).  The server should
+    send an EOF and terminate any connections after sending its reply.
+
+    The format of an error should be: ERROR (#): <Error String>
+    Use the errno value and errno string for these messages where
+    available, if not, come up with your own.
+
+    You may assume that (a) the client will only send files from its local
+    directory, (b) the server will store files in its local directory, (c)
+    the server should send an error if the file is not found, and (d) any
+    command that leads to an overwrite of a file is intentional.
+
+    Note that you should not run the client and server from the same folder
+    when testing!
+
+  You will probably not want to invoke the "lookup" method directly in the
+  implementation of "insert" and "remove".  However, you probably will want
+  to make this code modular, so that you can use it in subsequent parts of
+  the assignment.
+
+Task #2: Add checksums
+
+  In this task, you should add a checksum line immediately before file
+  contents during a transmission.  You should use the md5 algorithm, which
+  can be found in this header:
+  
+    #include <openssl/md5.h>
+
+  To avoid clashing with prior tasks, use "PUTC", "GETC" and "OKC" to
+  specify that a checksum is involved.
+
+  Note that the server should verify the checksum before sending OK after a
+  PUT.  After a GET, the client should compute the checksum, and if it
+  doesn't match, it should cancel the GET and print an error.
+
+Task #3: Add an LRU cache to the server
+
+  In this task, you should add an LRU cache to your server.  Your cache
+  should store the entire contents of the N most recently used files in
+  memory.  On a GET, you should serve the file without accessing the disk at
+  all.  On a PUT, you should save the file to disk, and also place it in the
+  cache, so that you can satisfy future GETs quickly.
+
+  Note that we have built a bug into the above specification.  It is
+  intentional.  Suppose the client PUTs file x.  Then suppose that the
+  administrator deletes x from the folder where the server is running.  x
+  should remain cached until sufficient GETs and PUTs are issued to cause x
+  to leave the cache.
+
+  This mechanism should not use a different protocol as it is server-side.
+
+Task #4: Add encryption to the client
+
+  The bug in Task #3 should give you pause: an administrator can access your
+  files at any time!  To secure them, extend your client.c so that it
+  encrypts files before PUT, and decrypts them after GET.  You may assume
+  that the user has run the following commands in the working directory:
+
+    openssl genrsa -out private.pem 2048
+    openssl rsa -in private.pem -outform PEM -pubout -out public.pem
+
+  Thus you may assume that there are files "private.pem" and "public.pem"
+  that contain the encryption keys to use.  Be sure to use the correct key
+  before sending content.
+
+  This mechanism should not use a different protocol as it is client-side.
+
+  Note that the server is untrusted, and should not know anything about the
+  encryption.  You should be able to use functions such as
+  PEM_read_RSA_PUBKEY() to load your encryption keys, and functions such as
+  RSA_public_encrypt() to encrypt and decrypt your data.  Note, too, that RSA
+  is a 2048-bit algorithm, so you may need to be clever about how you encrypt
+  the data (i.e., you may need to break it into 256-byte blocks, and you may
+  need to pad the last block).  If you require special padding, be sure to
+  modify your file format so that padding and un-padding are not detectable
+  after the file is downloaded.
+
+Turn-In Instructions
+
+  To turn in your solutions, type 'make turnin.
+
+  You may turn in your solutions as many times as you like.  The last turn-in
+  received before grading begins is the only turn-in that will be graded.
