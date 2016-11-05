@@ -144,6 +144,11 @@ void echo_client(int fd) {
  */
 void put_file(int fd, char *put_name) {
   /* TODO: implement a proper solution, instead of calling the echo() client */
+
+  write(fd, "PUT\n", 4);
+  write(fd, "filename.txt\n", 13);
+  write(fd, "5\n", 2);
+  
   char* c;
   char buffer[256];
   FILE * my_file;
