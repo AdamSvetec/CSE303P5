@@ -87,8 +87,11 @@ void echo_client(int fd) {
         const int MAXLINE = 8192;
         char buf[MAXLINE];
         bzero(buf, MAXLINE);
+
+	// fread(buffer, strlen(c)+1, 1, fp)
         if (fgets(buf, MAXLINE, stdin) == NULL) {
-            if (ferror(stdin))
+
+	  if (ferror(stdin))
                 die("fgets error", strerror(errno));
             break;
         }
@@ -140,20 +143,39 @@ void echo_client(int fd) {
  * put_file() - send a file to the server accessible via the given socket fd
  */
 void put_file(int fd, char *put_name) {
-    /* TODO: implement a proper solution, instead of calling the echo() client */
-  //beggining of added code just my initial ideas so far
-  /*  FILE * my_file;
-  char client_buffer[256];
+  /* TODO: implement a proper solution, instead of calling the echo() client */
+
+  write(fd, "PUT\n", 4);
+  write(fd, "filename.txt\n", 13);
+  write(fd, "5\n", 2);
+  
+  char* c;
+  char buffer[256];
+  FILE * my_file;
+ // char client_buffer[256];
   my_file=fopen(put_name, "r");
-  fscanf(my_file,"%s",client_buffer);
-  write(fd,client_buffer,256);
-  printf(" %s was successfully sent",put_name);
-
-
-  fclose(my_file);
-  */
-	 //end of added code
-    echo_client(fd);
+  if(my_file==NULL){
+    die("issue with fopen",put_name);
+  }
+  c=fgets(buffer,255,my_file);//255 makes sure there will always be
+			      //null character at end of buffer
+  while(c != NULL){
+    printf("%s", buffer);
+    int nsofar = 0;
+    int nremain = strlen(buffer);
+    while (nremain > 0) {
+     
+      if ((nsofar = write(fd, c, nremain)) <= 0) {
+	if (errno != EINTR)
+	  die("Write error: ", strerror(errno));
+	nsofar = 0;
+      }
+      nremain -= nsofar;
+      c += nsofar;
+    }
+    c=fgets(buffer,255,my_file);//see above
+  } 
+     fclose(my_file);
 }
 
 /*
