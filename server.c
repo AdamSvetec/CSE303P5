@@ -101,7 +101,7 @@ void handle_requests(int listenfd, void (*service_function)(int, int), int param
     }
 }
 
-//TODO: this isn't write, can't count on read reading in lines
+/* Reads single line of input from socket, leaving rest in the socket */
 void read_line(char * buffer, int bufsize, int connfd){  
   bzero(buffer, bufsize);
 
@@ -111,7 +111,7 @@ void read_line(char * buffer, int bufsize, int connfd){
   size_t nsofar;                 /* characters read so far */
   while (1) {
     /* read some data; swallow EINTRs */
-    if ((nsofar = read(connfd, bufp, nremain)) < 0) {
+    if ((nsofar = read(connfd, bufp, 1)) < 0) {
       if (errno != EINTR)
 	die("read error: ", strerror(errno));
       continue;
@@ -131,9 +131,14 @@ void read_line(char * buffer, int bufsize, int connfd){
   }
 }
 
-
 //TODO: write to file instead of stdout
 void put_file(char * filename, char * numbytes, int connfd){
+  FILE * write_file;
+  //TODO: write_file = fopen(filename, "w");
+  write_file = fopen("testingwrite.txt", "w");
+  if(write_file == NULL){
+    die("write error: ", strerror(errno));
+  }
   while (1) {
     const int MAXLINE = 8192;
     char      buf[MAXLINE];   // a place to store text from the client
@@ -147,15 +152,17 @@ void put_file(char * filename, char * numbytes, int connfd){
       // read some data; swallow EINTRs
       if ((nsofar = read(connfd, buf, MAXLINE)) < 0) {
 	if (errno != EINTR)
+	  fclose(write_file);
 	  die("read error: ", strerror(errno));
 	continue;
       }
       // end service to this client on EOF
       if (nsofar == 0) {
-	fprintf(stderr, "received EOF\n");
+	fclose(write_file);
 	return;
       }
       printf("%s", buf);
+      fprintf(write_file, "%s", buf);
     }
   }
 }
@@ -175,15 +182,12 @@ void file_server(int connfd, int lru_size) {
   
   char filename_buf[COM_MAXLINE]; //a place to store text from the client
   read_line(filename_buf, COM_MAXLINE, connfd);
-
-  printf("%s\n%s\n",com_buf, filename_buf);
   
-  if(strcmp(com_buf, "PUT")){
+  if(strcmp(com_buf, "PUT") == 0){
     char bytesize_buf[COM_MAXLINE];
     read_line(bytesize_buf, COM_MAXLINE, connfd);
-    printf("%s\n%s\n%s\n",com_buf, filename_buf, bytesize_buf);
     put_file(filename_buf, bytesize_buf, connfd);
-  }else if(strcmp(com_buf, "GET")){
+  }else if(strcmp(com_buf, "GET") == 0){
     //get_file(filename_buf, connfd);
   }else{
     fprintf(stderr, "Command not recognized");
