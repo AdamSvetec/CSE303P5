@@ -76,95 +76,36 @@ int connect_to_server(char *server, int port) {
 }
 
 /*
- * echo_client() - this is dummy code to show how to read and write on a
- *                 socket when there can be short counts.  The code
- *                 implements an "echo" client.
- */
-void echo_client(int fd) {
-    // main loop
-    while (1) {
-        /* set up a buffer, clear it, and read keyboard input */
-        const int MAXLINE = 8192;
-        char buf[MAXLINE];
-        bzero(buf, MAXLINE);
-
-	// fread(buffer, strlen(c)+1, 1, fp)
-        if (fgets(buf, MAXLINE, stdin) == NULL) {
-
-	  if (ferror(stdin))
-                die("fgets error", strerror(errno));
-            break;
-        }
-
-        /* send keystrokes to the server, handling short counts */
-        size_t n = strlen(buf);
-        size_t nremain = n;
-        ssize_t nsofar;
-        char *bufp = buf;
-        while (nremain > 0) {
-            if ((nsofar = write(fd, bufp, nremain)) <= 0) {
-                if (errno != EINTR) {
-                    fprintf(stderr, "Write error: %s\n", strerror(errno));
-                    exit(0);
-                }
-                nsofar = 0;
-            }
-            nremain -= nsofar;
-            bufp += nsofar;
-        }
-
-        /* read input back from socket (again, handle short counts)*/
-        bzero(buf, MAXLINE);
-        bufp = buf;
-        nremain = MAXLINE;
-        while (1) {
-            if ((nsofar = read(fd, bufp, nremain)) < 0) {
-                if (errno != EINTR)
-                    die("read error: ", strerror(errno));
-                continue;
-            }
-            /* in echo, server should never EOF */
-            if (nsofar == 0)
-                die("Server error: ", "received EOF");
-            bufp += nsofar;
-            nremain -= nsofar;
-            if (*(bufp-1) == '\n') {
-                *bufp = 0;
-                break;
-            }
-        }
-
-        /* output the result */
-        printf("%s", buf);
-    }
-}
-
-/*
  * put_file() - send a file to the server accessible via the given socket fd
  */
 void put_file(int fd, char *put_name) {
-  /* TODO: implement a proper solution, instead of calling the echo() client */
-
-  write(fd, "PUT\n", 4);
-  write(fd, "filename.txt\n", 13);
-  write(fd, "5\n", 2);
-  
-  char* c;
-  char buffer[256];
   FILE * my_file;
- // char client_buffer[256];
   my_file=fopen(put_name, "r");
   if(my_file==NULL){
     die("issue with fopen",put_name);
   }
+  //Write PUT
+  write(fd, "PUT\n", 4);
+  //Write filename
+  write(fd, put_name, strlen(put_name));
+  write(fd, "\n", 1);
+  //Write file size
+  fseek(my_file, 0, SEEK_END);
+  int size = ftell(my_file);
+  fseek(my_file, 0, SEEK_SET);
+  char filesize [1024];
+  sprintf(filesize,"%d", size);
+  write(fd, filesize, strlen(filesize));
+  write(fd, "\n", 1);
+
+  char* c;
+  char buffer[256];
   c=fgets(buffer,255,my_file);//255 makes sure there will always be
 			      //null character at end of buffer
   while(c != NULL){
-    printf("%s", buffer);
     int nsofar = 0;
     int nremain = strlen(buffer);
-    while (nremain > 0) {
-     
+    while (nremain > 0) {     
       if ((nsofar = write(fd, c, nremain)) <= 0) {
 	if (errno != EINTR)
 	  die("Write error: ", strerror(errno));
@@ -174,8 +115,42 @@ void put_file(int fd, char *put_name) {
       c += nsofar;
     }
     c=fgets(buffer,255,my_file);//see above
-  } 
-     fclose(my_file);
+  }
+  fclose(my_file);
+
+  char read_buffer[1024];
+  read(fd, read_buffer, 1023);
+  printf("RECIEVED: %s\n", read_buffer);
+}
+
+/* Reads single line of input from socket, leaving rest in the socket */
+void read_line(char * buffer, int bufsize, int connfd){
+  bzero(buffer, bufsize);
+
+  /* read from socket, recognizing that we may get short counts */
+  char *bufp = buffer;          /* current pointer into buffer */
+  ssize_t nremain = bufsize; /* max characters we can still read*/
+  size_t nsofar;                 /* characters read so far */
+  while (1) {
+    /* read some data; swallow EINTRs */
+    if ((nsofar = read(connfd, bufp, 1)) < 0) {
+      if (errno != EINTR)
+	die("read error: ", strerror(errno));
+      continue;
+    }
+    /* end service to this client on EOF */
+    if (nsofar == 0) {
+      fprintf(stderr, "received EOF\n");
+      return;
+    }
+    /* update pointer for next bit of reading */
+    bufp += nsofar;
+    nremain -= nsofar;
+    if (*(bufp-1) == '\n') {
+      *(bufp-1) = 0;
+      break;
+    }
+  }
 }
 
 /*
@@ -183,8 +158,59 @@ void put_file(int fd, char *put_name) {
  *              fd, and save it according to the save_name
  */
 void get_file(int fd, char *get_name, char *save_name) {
-    /* TODO: implement a proper solution, instead of calling the echo() client */
-    echo_client(fd);
+  //Write PUT
+  write(fd, "GET\n", 4);
+  //Write filename
+  write(fd, get_name, strlen(get_name));
+  write(fd, "\n", 1);
+
+  FILE * write_file;
+  write_file = fopen(save_name, "w");
+  if(write_file == NULL){
+    die("write error: ", strerror(errno));
+  }
+
+  char response_buf [1024];
+  read_line(response_buf, 1024, fd);
+  char filename_buf [1024];
+  read_line(filename_buf, 1024, fd);
+  if(strcmp(filename_buf, get_name) != 0){
+    die("read error:", "file returned is not correct");
+  }
+  char bytesize_buf[1024];
+  read_line(bytesize_buf, 1024, fd);
+  
+  int num_expected_bytes = atoi(bytesize_buf);
+  int num_actual_bytes = 0;
+  while (1) {
+    const int MAXLINE = 8192;
+    char buf[MAXLINE]; // a place to store text from the client
+    bzero(buf, MAXLINE);
+
+    // read from socket, recognizing that we may get short counts
+    size_t nread; //number of bytes read
+    while (1) {
+      // read some data; swallow EINTRs
+      if ((nread = read(fd, buf, MAXLINE)) < 0) {
+	if (errno != EINTR)
+	  fclose(write_file);
+	die("read error: ", strerror(errno));
+	continue;
+      }
+      fprintf(write_file, "%s", buf);
+      num_actual_bytes += nread;
+      // end service to this client on EOF
+      if(num_actual_bytes == num_expected_bytes){
+	fclose(write_file);
+	return;
+      }
+      if(nread == 0){
+	die("ERROR (99):", "Number of bytes read not what expected\n");
+	fclose(write_file);
+	return;
+      }
+    }
+  }
 }
 
 /*

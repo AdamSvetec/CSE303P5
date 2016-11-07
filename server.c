@@ -131,40 +131,90 @@ void read_line(char * buffer, int bufsize, int connfd){
   }
 }
 
-//TODO: write to file instead of stdout
+//Writes all bits recieved to new or overwritten file at filename
 void put_file(char * filename, char * numbytes, int connfd){
   FILE * write_file;
-  //TODO: write_file = fopen(filename, "w");
-  write_file = fopen("testingwrite.txt", "w");
+  //Actual Implementation: write_file = fopen(filename, "w");
+  write_file = fopen("testingwrite.txt", "w"); //Just for testing purposes
   if(write_file == NULL){
     die("write error: ", strerror(errno));
   }
+  int num_expected_bytes = atoi(numbytes);
+  int num_actual_bytes = 0;
   while (1) {
     const int MAXLINE = 8192;
-    char      buf[MAXLINE];   // a place to store text from the client
+    char buf[MAXLINE];   // a place to store text from the client
     bzero(buf, MAXLINE);
 
     // read from socket, recognizing that we may get short counts
-    char *bufp = buf;              // current pointer into buffer
-    ssize_t nremain = MAXLINE;     // max characters we can still read
-    size_t nsofar;                 // characters read so far
+    size_t nread; //number of bytes read
     while (1) {
       // read some data; swallow EINTRs
-      if ((nsofar = read(connfd, buf, MAXLINE)) < 0) {
+      if ((nread = read(connfd, buf, MAXLINE)) < 0) {
 	if (errno != EINTR)
 	  fclose(write_file);
 	  die("read error: ", strerror(errno));
 	continue;
       }
+      fprintf(write_file, "%s", buf);
+      num_actual_bytes += nread; 
       // end service to this client on EOF
-      if (nsofar == 0) {
+      if(num_actual_bytes == num_expected_bytes){
+	write(connfd, "OK\n", 4);
 	fclose(write_file);
 	return;
       }
-      printf("%s", buf);
-      fprintf(write_file, "%s", buf);
+      if(nread == 0){
+	char * error = "ERROR (99): Number of bytes read not what expected\n";
+	write(connfd, error, strlen(error)+1);
+	fclose(write_file);
+	return;
+      }
     }
   }
+}
+
+// Sends back file specified by filename back to the client
+void get_file(char * filename, int connfd){
+  FILE * my_file;
+  my_file=fopen(filename, "r");
+  if(my_file==NULL){
+    char * error = "ERROR (99): file not found";
+    write(connfd,error,strlen(error)+1);
+    return;
+  }
+  //Write PUT
+  write(connfd, "OK\n", 3);
+  //Write filename
+  write(connfd, filename, strlen(filename));
+  write(connfd, "\n", 1);
+  //Write file size
+  fseek(my_file, 0, SEEK_END);
+  int size = ftell(my_file);
+  fseek(my_file, 0, SEEK_SET);
+  char filesize [1024];
+  sprintf(filesize,"%d", size);
+  write(connfd, filesize, strlen(filesize));
+  write(connfd, "\n", 1);
+
+  char* c;
+  char buffer[256];
+  c=fgets(buffer,255,my_file);
+  while(c != NULL){
+    int nsofar = 0;
+    int nremain = strlen(buffer);
+    while (nremain > 0) {
+      if ((nsofar = write(connfd, c, nremain)) <= 0) {
+	if (errno != EINTR)
+	  die("Write error: ", strerror(errno));
+	nsofar = 0;
+      }
+      nremain -= nsofar;
+      c += nsofar;
+    }
+    c=fgets(buffer,255,my_file);
+  }
+  fclose(my_file);
 }
 
 /*
@@ -186,9 +236,10 @@ void file_server(int connfd, int lru_size) {
   if(strcmp(com_buf, "PUT") == 0){
     char bytesize_buf[COM_MAXLINE];
     read_line(bytesize_buf, COM_MAXLINE, connfd);
+    //printf("%s\n", bytesize_buf);
     put_file(filename_buf, bytesize_buf, connfd);
   }else if(strcmp(com_buf, "GET") == 0){
-    //get_file(filename_buf, connfd);
+    get_file(filename_buf, connfd);
   }else{
     fprintf(stderr, "Command not recognized");
   }
