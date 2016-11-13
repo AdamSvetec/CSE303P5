@@ -189,8 +189,9 @@ void get_file(char * filename, int connfd){
   write(connfd, filename, strlen(filename));
   write(connfd, "\n", 1);
   //Write file size
-  fseek(my_file, 0, SEEK_END);
-  int size = ftell(my_file);
+  fseek(my_file, 0, SEEK_END);//finds the end of the file
+  int size = ftell(my_file);//tells you where on the file you are part
+			    //of size
   fseek(my_file, 0, SEEK_SET);
   char filesize [1024];
   sprintf(filesize,"%d", size);
@@ -232,7 +233,8 @@ void file_server(int connfd, int lru_size) {
   
   char filename_buf[COM_MAXLINE]; //a place to store text from the client
   read_line(filename_buf, COM_MAXLINE, connfd);
-  
+  //above code fills first buffer with PUT or GET,
+  //Then it fills the second with the filename
   if(strcmp(com_buf, "PUT") == 0){
     char bytesize_buf[COM_MAXLINE];
     read_line(bytesize_buf, COM_MAXLINE, connfd);
@@ -240,7 +242,20 @@ void file_server(int connfd, int lru_size) {
     put_file(filename_buf, bytesize_buf, connfd);
   }else if(strcmp(com_buf, "GET") == 0){
     get_file(filename_buf, connfd);
-  }else{
+  }
+  else if(strcmp(com_buf, "PUTC") == 0){
+    //TODO add checksum functionality
+    char bytesize_buf[COM_MAXLINE];
+    read_line(bytesize_buf, COM_MAXLINE, connfd);
+    //printf("%s\n", bytesize_buf);
+    put_file(filename_buf, bytesize_buf, connfd);
+ 
+  }
+  else if(strcmp(com_buf, "GETC") == 0){
+    get_file(filename_buf, connfd);
+    //TODO add checksum Functionality
+  }
+  else{
     fprintf(stderr, "Command not recognized");
   }
 }

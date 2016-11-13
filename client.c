@@ -20,7 +20,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include "support.h"
-
+#include <openssl/md5.h>
 /*
  * help() - Print a help message
  */
@@ -78,6 +78,20 @@ int connect_to_server(char *server, int port) {
 /*
  * put_file() - send a file to the server accessible via the given socket fd
  */
+void put_header(int fd, char* put_name,int check_sum_flag){
+
+  if(check_sum_flag==1){
+     write(fd, "PUTC\n", 5);
+     //TODO md5
+     printf("PUTC put");
+  }
+  else {
+     write(fd, "PUT\n", 4);
+   }
+  write(fd, put_name, strlen(put_name));
+  write(fd, "\n", 1);
+}
+  
 void put_file(int fd, char *put_name) {
   FILE * my_file;
   my_file=fopen(put_name, "r");
@@ -85,10 +99,7 @@ void put_file(int fd, char *put_name) {
     die("issue with fopen",put_name);
   }
   //Write PUT
-  write(fd, "PUT\n", 4);
   //Write filename
-  write(fd, put_name, strlen(put_name));
-  write(fd, "\n", 1);
   //Write file size
   fseek(my_file, 0, SEEK_END);
   int size = ftell(my_file);
@@ -157,17 +168,26 @@ void read_line(char * buffer, int bufsize, int connfd){
  * get_file() - get a file from the server accessible via the given socket
  *              fd, and save it according to the save_name
  */
-void get_file(int fd, char *get_name, char *save_name) {
-  //Write PUT
-  write(fd, "GET\n", 4);
-  //Write filename
+void get_header( int fd, char * get_name,int check_sum_flag){
+
+  if(check_sum_flag==1){
+    write(fd,"GETC\n",5);
+    //TODO figure out MD5 checksum here
+    printf("GETC put");
+  }
+  else {
+    write(fd,"GET\n",4);   
+  }
   write(fd, get_name, strlen(get_name));
   write(fd, "\n", 1);
-
+}
+void get_file(int fd, char *get_name, char *save_name) {
+ 
   FILE * write_file;
   write_file = fopen(save_name, "w");
   if(write_file == NULL){
-    die("write error: ", strerror(errno));
+    // die("write error: ", strerror(errno));
+    write_file=stdout;
   }
 
   char response_buf [1024];
@@ -224,31 +244,41 @@ int main(int argc, char **argv) {
     char *get_name = NULL;
     int   port;
     char *save_name = NULL;
-
+    int check_sum_flag=0;
     check_team(argv[0]);
 
     /* parse the command-line options. */
     /* TODO: add additional opt flags */
-    while ((opt = getopt(argc, argv, "hs:P:G:S:p:")) != -1) {
+    while ((opt = getopt(argc, argv, "hCs:P:G:S:p:")) != -1) {
         switch(opt) {
           case 'h': help(argv[0]); break;
           case 's': server = optarg; break;
           case 'P': put_name = optarg; break;
           case 'G': get_name = optarg; break;
           case 'S': save_name = optarg; break;
-          case 'p': port = atoi(optarg); break;
+	  case 'C': check_sum_flag=1;break;
+	  case 'p': port = atoi(optarg); break;
         }
     }
 
     /* open a connection to the server */
     int fd = connect_to_server(server, port);
+    if(check_sum_flag==1){
 
+      //      printf("c arg worked");
+
+
+      
+    }
     /* put or get, as appropriate */
-    if (put_name)
-        put_file(fd, put_name);
-    else
+    if (put_name){
+      put_header(fd,put_name,check_sum_flag);
+      put_file(fd, put_name);
+    }
+    else{
+        get_header(fd,get_name,check_sum_flag);
         get_file(fd, get_name, save_name);
-
+    }
     /* close the socket */
     int rc;
     if ((rc = close(fd)) < 0)
