@@ -90,6 +90,19 @@ void put_header(int fd, char* put_name,int check_sum_flag){
    }
   write(fd, put_name, strlen(put_name));
   write(fd, "\n", 1);
+  FILE * my_file;
+  my_file=fopen(put_name, "r");
+  if(my_file==NULL){
+    die("issue with fopen",put_name);
+  }
+  fseek(my_file, 0, SEEK_END);
+  int size = ftell(my_file);
+  fseek(my_file, 0, SEEK_SET);
+  fclose(my_file);
+  char filesize [1024];
+  sprintf(filesize,"%d", size);
+  write(fd, filesize, strlen(filesize));
+  write(fd, "\n", 1);
 }
   
 void put_file(int fd, char *put_name) {
@@ -98,16 +111,6 @@ void put_file(int fd, char *put_name) {
   if(my_file==NULL){
     die("issue with fopen",put_name);
   }
-  //Write PUT
-  //Write filename
-  //Write file size
-  fseek(my_file, 0, SEEK_END);
-  int size = ftell(my_file);
-  fseek(my_file, 0, SEEK_SET);
-  char filesize [1024];
-  sprintf(filesize,"%d", size);
-  write(fd, filesize, strlen(filesize));
-  write(fd, "\n", 1);
 
   char* c;
   char buffer[256];
