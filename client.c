@@ -1,3 +1,4 @@
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -111,24 +112,26 @@ void put_file(int fd, char *put_name) {
   if(my_file==NULL){
     die("issue with fopen",put_name);
   }
+  int file_no = fileno(my_file);
 
-  char* c;
-  char buffer[256];
-  c=fgets(buffer,255,my_file);//255 makes sure there will always be
-			      //null character at end of buffer
-  while(c != NULL){
+  int MAXSIZE = 256;
+  void *buffer = malloc(MAXSIZE);
+  int nread = read(file_no, buffer, MAXSIZE);
+  void * ptr;
+  while(nread != 0){
     int nsofar = 0;
-    int nremain = strlen(buffer);
+    int nremain = nread;
+    ptr = buffer;
     while (nremain > 0) {     
-      if ((nsofar = write(fd, c, nremain)) <= 0) {
+      if ((nsofar = write(fd, ptr, nremain)) <= 0) {
 	if (errno != EINTR)
 	  die("Write error: ", strerror(errno));
-	nsofar = 0;
+	fprintf(stderr, "Error with write\n");
       }
       nremain -= nsofar;
-      c += nsofar;
+      ptr += nsofar;
     }
-    c=fgets(buffer,255,my_file);//see above
+    nread = read(file_no, buffer, MAXSIZE);//see above
   }
   fclose(my_file);
 

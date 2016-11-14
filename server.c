@@ -102,9 +102,8 @@ void handle_requests(int listenfd, void (*service_function)(int, int), int param
 }
 
 /* Reads single line of input from socket, leaving rest in the socket */
-void read_line(char * buffer, int bufsize, int connfd){  
+int read_line(char * buffer, int bufsize, int connfd){  
   bzero(buffer, bufsize);
-
   /* read from socket, recognizing that we may get short counts */
   char *bufp = buffer;          /* current pointer into buffer */
   ssize_t nremain = bufsize; /* max characters we can still read*/
@@ -119,7 +118,7 @@ void read_line(char * buffer, int bufsize, int connfd){
     /* end service to this client on EOF */
     if (nsofar == 0) {
       fprintf(stderr, "received EOF\n");
-      return;
+      return 0;
     }
     /* update pointer for next bit of reading */
     bufp += nsofar;
@@ -129,47 +128,59 @@ void read_line(char * buffer, int bufsize, int connfd){
       break;
     }
   }
+  return 1;
 }
 
 //Writes all bits recieved to new or overwritten file at filename
-void put_file(char * filename, char * numbytes, int connfd){
+int put_file(char * filename, char * numbytes, int connfd, int md5_flag, char * md5_cs){
   FILE * write_file;
   //Actual Implementation: write_file = fopen(filename, "w");
   write_file = fopen("testingwrite.txt", "w"); //Just for testing purposes
   if(write_file == NULL){
     die("write error: ", strerror(errno));
   }
+  int file_no = fileno(write_file);
   int num_expected_bytes = atoi(numbytes);
   int num_actual_bytes = 0;
+  MD5_CTX *c;
+  if(md5_flag){
+    MD5_Init(c);
+  }
+  const int MAXSIZE = 8192;
+  void *buf = malloc(MAXSIZE);   // a place to store text from the client
+  
+  size_t nread; //number of bytes read
   while (1) {
-    const int MAXLINE = 8192;
-    char buf[MAXLINE];   // a place to store text from the client
-    bzero(buf, MAXLINE);
-
-    // read from socket, recognizing that we may get short counts
-    size_t nread; //number of bytes read
-    while (1) {
-      // read some data; swallow EINTRs
-      if ((nread = read(connfd, buf, MAXLINE)) < 0) {
-	if (errno != EINTR)
-	  fclose(write_file);
-	  die("read error: ", strerror(errno));
-	continue;
-      }
-      fprintf(write_file, "%s", buf);
-      num_actual_bytes += nread; 
-      // end service to this client on EOF
-      if(num_actual_bytes == num_expected_bytes){
-	write(connfd, "OK\n", 4);
+    bzero(buf, MAXSIZE);
+    if ((nread = read(connfd, buf, MAXSIZE)) < 0) {
+      if (errno != EINTR){
 	fclose(write_file);
-	return;
+	free(buf);
+	die("read error: ", strerror(errno));
       }
-      if(nread == 0){
-	char * error = "ERROR (99): Number of bytes read not what expected\n";
-	write(connfd, error, strlen(error)+1);
-	fclose(write_file);
-	return;
+      fprintf(stderr, "error in read\n");
+      continue;
+    }
+    write(file_no, buf, nread);
+    //fprintf(stderr, "%s", buf);
+    if(md5_flag){
+      MD5_Update(c, buf, strlen(buf));
+    }
+    num_actual_bytes += nread; 
+    if(num_actual_bytes == num_expected_bytes){
+      free(buf);
+      fclose(write_file);
+      if(md5_flag){
+	MD5_Final(md5_cs, c);
       }
+      return 1;
+    }
+    if(nread == 0){
+      char * error = "ERROR (99): Number of bytes read not what expected\n";
+      write(connfd, error, strlen(error)+1);
+      free(buf);
+      fclose(write_file);
+      return 0;
     }
   }
 }
@@ -239,7 +250,9 @@ void file_server(int connfd, int lru_size) {
     char bytesize_buf[COM_MAXLINE];
     read_line(bytesize_buf, COM_MAXLINE, connfd);
     //printf("%s\n", bytesize_buf);
-    put_file(filename_buf, bytesize_buf, connfd);
+    if(put_file(filename_buf, bytesize_buf, connfd, 0, NULL)){
+      write(connfd, "OK\n", 3);
+    }
   }else if(strcmp(com_buf, "GET") == 0){
     get_file(filename_buf, connfd);
   }
@@ -248,8 +261,11 @@ void file_server(int connfd, int lru_size) {
     char bytesize_buf[COM_MAXLINE];
     read_line(bytesize_buf, COM_MAXLINE, connfd);
     //printf("%s\n", bytesize_buf);
-    put_file(filename_buf, bytesize_buf, connfd);
- 
+    char * md5_buffer;
+    if(put_file(filename_buf, bytesize_buf, connfd, 1, md5_buffer)){
+      printf("%s\n",md5_buffer);
+      write(connfd, "OKC\n", 4);
+    }
   }
   else if(strcmp(com_buf, "GETC") == 0){
     get_file(filename_buf, connfd);
