@@ -205,38 +205,53 @@ void get_file(int fd, char *get_name, char *save_name) {
   }
   char bytesize_buf[1024];
   read_line(bytesize_buf, 1024, fd);
+  //
+  int file_no=fileno(write_file);
   
+  //
   int num_expected_bytes = atoi(bytesize_buf);
   int num_actual_bytes = 0;
-  while (1) {
-    const int MAXLINE = 8192;
-    char buf[MAXLINE]; // a place to store text from the client
-    bzero(buf, MAXLINE);
+  
+  int MAXSIZE = 256;
+  void *buf = malloc(MAXSIZE);
 
-    // read from socket, recognizing that we may get short counts
-    size_t nread; //number of bytes read
-    while (1) {
-      // read some data; swallow EINTRs
-      if ((nread = read(fd, buf, MAXLINE)) < 0) {
-	if (errno != EINTR)
-	  fclose(write_file);
-	die("read error: ", strerror(errno));
-	continue;
-      }
-      fprintf(write_file, "%s", buf);
-      num_actual_bytes += nread;
-      // end service to this client on EOF
-      if(num_actual_bytes == num_expected_bytes){
+  MD5_CTX *c;
+  /*  if(md5_flag){
+    MD5_init(c);
+    }*/
+     
+
+  
+  // read from socket, recognizing that we may get short counts
+  size_t nread; //number of bytes read
+  while (1) {
+     bzero(buf, MAXSIZE);
+    // read some data; swallow EINTRs
+    if ((nread = read(fd, buf, MAXSIZE)) < 0) {
+      if (errno != EINTR){
 	fclose(write_file);
-	return;
+	free(buf);
+	die("read error: ", strerror(errno));
       }
+      continue;
+    }
+    // fprintf(write_file, "%s", buf);
+    write(file_no,buf,nread);
+    num_actual_bytes += nread;
+      // end service to this client on EOF
+    if(num_actual_bytes == num_expected_bytes){
+      fclose(write_file);
+      free(buf);
+      return;
+    }
       if(nread == 0){
 	die("ERROR (99):", "Number of bytes read not what expected\n");
 	fclose(write_file);
+	free(buf);
 	return;
       }
-    }
   }
+  free(buf);
 }
 
 /*
