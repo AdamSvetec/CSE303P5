@@ -186,6 +186,29 @@ int put_file(char * filename, char * numbytes, int connfd, int md5_flag, char * 
   }
 }
 
+/* sends the header of the get response to client */
+void send_get_header(char* header, char * filename, int connfd){
+  FILE * my_file;
+  my_file=fopen(filename, "r");
+  if(my_file==NULL){
+    char * error = "ERROR (99): file not found";
+    write(connfd,error,strlen(error)+1);
+    return;
+  }
+  write(connfd, header, strlen(header));
+  write(connfd, "\n", 1);
+  write(connfd, filename, strlen(filename));
+  write(connfd, "\n", 1);
+  fseek(my_file, 0, SEEK_END);
+  int size = ftell(my_file);
+  fseek(my_file, 0, SEEK_SET);
+  char filesize [1024];
+  sprintf(filesize,"%d", size);
+  write(connfd, filesize, strlen(filesize));
+  write(connfd, "\n", 1);
+  fclose(my_file);
+}
+
 // Sends back file specified by filename back to the client
 void get_file(char * filename, int connfd){
   FILE * my_file;
@@ -234,8 +257,7 @@ void file_server(int connfd, int lru_size) {
   
   char filename_buf[COM_MAXLINE]; //a place to store text from the client
   read_line(filename_buf, COM_MAXLINE, connfd);
-  //above code fills first buffer with PUT or GET,
-  //Then it fills the second with the filename
+
   if(strcmp(com_buf, "PUT") == 0){
     char bytesize_buf[COM_MAXLINE];
     read_line(bytesize_buf, COM_MAXLINE, connfd);
@@ -244,24 +266,7 @@ void file_server(int connfd, int lru_size) {
       write(connfd, "OK\n", 3);
     }
   }else if(strcmp(com_buf, "GET") == 0){
-    FILE * my_file;
-    my_file=fopen(filename_buf, "r");
-    if(my_file==NULL){
-      char * error = "ERROR (99): file not found";
-      write(connfd,error,strlen(error)+1);
-      return;
-    }
-    write(connfd, "OK\n", 3);
-    write(connfd, filename_buf, strlen(filename_buf));
-    write(connfd, "\n", 1);
-    fseek(my_file, 0, SEEK_END);
-    int size = ftell(my_file);
-    fseek(my_file, 0, SEEK_SET);
-    char filesize [1024];
-    sprintf(filesize,"%d", size);
-    write(connfd, filesize, strlen(filesize));
-    write(connfd, "\n", 1);
-    fclose(my_file);
+    send_get_header("OK",filename_buf, connfd);
     get_file(filename_buf, connfd);
   }
   else if(strcmp(com_buf, "PUTC") == 0){
@@ -276,6 +281,7 @@ void file_server(int connfd, int lru_size) {
     }
   }
   else if(strcmp(com_buf, "GETC") == 0){
+    send_get_header("OKC",filename_buf, connfd);
     get_file(filename_buf, connfd);
     //TODO add checksum Functionality
   }
