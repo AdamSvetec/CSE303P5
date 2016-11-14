@@ -140,6 +140,7 @@ int put_file(char * filename, char * numbytes, int connfd, int md5_flag, char * 
     die("write error: ", strerror(errno));
   }
   int file_no = fileno(write_file);
+  
   int num_expected_bytes = atoi(numbytes);
   int num_actual_bytes = 0;
   MD5_CTX *c;
@@ -194,37 +195,26 @@ void get_file(char * filename, int connfd){
     write(connfd,error,strlen(error)+1);
     return;
   }
-  //Write PUT
-  write(connfd, "OK\n", 3);
-  //Write filename
-  write(connfd, filename, strlen(filename));
-  write(connfd, "\n", 1);
-  //Write file size
-  fseek(my_file, 0, SEEK_END);//finds the end of the file
-  int size = ftell(my_file);//tells you where on the file you are part
-			    //of size
-  fseek(my_file, 0, SEEK_SET);
-  char filesize [1024];
-  sprintf(filesize,"%d", size);
-  write(connfd, filesize, strlen(filesize));
-  write(connfd, "\n", 1);
+  int file_no = fileno(my_file);
 
-  char* c;
-  char buffer[256];
-  c=fgets(buffer,255,my_file);
-  while(c != NULL){
+  int MAXSIZE = 256;
+  void *buffer = malloc(MAXSIZE);
+  int nread = read(file_no, buffer, MAXSIZE);
+  void * ptr;
+  while(nread != 0){
     int nsofar = 0;
-    int nremain = strlen(buffer);
+    int nremain = nread;
+    ptr = buffer;
     while (nremain > 0) {
-      if ((nsofar = write(connfd, c, nremain)) <= 0) {
+      if ((nsofar = write(connfd, ptr, nremain)) <= 0) {
 	if (errno != EINTR)
 	  die("Write error: ", strerror(errno));
-	nsofar = 0;
+	fprintf(stderr, "Error with write\n");
       }
       nremain -= nsofar;
-      c += nsofar;
+      ptr += nsofar;
     }
-    c=fgets(buffer,255,my_file);
+    nread = read(file_no, buffer, MAXSIZE);
   }
   fclose(my_file);
 }
@@ -254,6 +244,24 @@ void file_server(int connfd, int lru_size) {
       write(connfd, "OK\n", 3);
     }
   }else if(strcmp(com_buf, "GET") == 0){
+    FILE * my_file;
+    my_file=fopen(filename_buf, "r");
+    if(my_file==NULL){
+      char * error = "ERROR (99): file not found";
+      write(connfd,error,strlen(error)+1);
+      return;
+    }
+    write(connfd, "OK\n", 3);
+    write(connfd, filename_buf, strlen(filename_buf));
+    write(connfd, "\n", 1);
+    fseek(my_file, 0, SEEK_END);
+    int size = ftell(my_file);
+    fseek(my_file, 0, SEEK_SET);
+    char filesize [1024];
+    sprintf(filesize,"%d", size);
+    write(connfd, filesize, strlen(filesize));
+    write(connfd, "\n", 1);
+    fclose(my_file);
     get_file(filename_buf, connfd);
   }
   else if(strcmp(com_buf, "PUTC") == 0){
