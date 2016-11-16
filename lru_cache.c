@@ -45,8 +45,12 @@ void insert(cache_file cf){
   for( int i=0;i<my_wrap.size; i++){
     if(my_wrap.files[i].filename==NULL){
       my_wrap.files[i]=cf;
+      return;
     }
   }
+  int lru=find_lru();
+  mywrap.files[lru]=cf;
+  return;
 }
 /*
 add_file
