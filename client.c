@@ -106,7 +106,7 @@ void put_header(int fd, char* put_name,int check_sum_flag){
     compute_md5(put_name, md5);
     write(fd, md5, MD5_HASH_SIZE);
     write(fd, "\n", 1);
-    write(STDERR_FILENO, md5, MD5_HASH_SIZE);
+    //write(STDERR_FILENO, md5, MD5_HASH_SIZE);
     free(md5);
   }
 }
@@ -139,10 +139,10 @@ void put_file(int fd, char *put_name) {
   }
   fclose(my_file);
   free(buffer);
-  
+
   char read_buffer[1024];
   read(fd, read_buffer, 1023);
-  printf("RECIEVED: %s\n", read_buffer);
+  printf("RECEIVED: %s\n", read_buffer);
 }
 
 /*
@@ -208,11 +208,10 @@ void get_file(int fd, char *get_name, char *save_name, int checksum_flag) {
     }
     // fprintf(write_file, "%s", buf);
     write(file_no,buf,nread);
-    if(checksum_flag && nread != 0){
+    if(checksum_flag && nread > 0){
       MD5_Update(&c, buf, nread);
     }
     num_actual_bytes += nread;
-      // end service to this client on EOF
     if(num_actual_bytes == num_expected_bytes){
       fclose(write_file);
       free(buf);

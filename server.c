@@ -157,6 +157,62 @@ void get_file(char * filename, int connfd){
   fclose(my_file);
 }
 
+//Writes all bits recieved to new or overwritten file at filename
+int write_file(char* filename, char* numbytes, int connfd, int md5_flag, unsigned char* md5_cs){
+  FILE * write_file;
+  write_file = fopen(filename, "w");
+  if(write_file == NULL){
+    fprintf(stderr,"write error: %s", strerror(errno));
+    return 0;
+  }
+  int file_no = fileno(write_file);
+
+  int num_expected_bytes = atoi(numbytes);
+  int num_actual_bytes = 0;
+
+  MD5_CTX c;
+  if(md5_flag){
+    MD5_Init(&c);
+  }
+
+  void *buf = malloc(TRANSFER_SIZE);   // a place to store text from
+  size_t nread; //number of bytes read
+  while (1) {
+    bzero(buf, TRANSFER_SIZE);
+    if ((nread = read(connfd, buf, TRANSFER_SIZE)) < 0) {
+      if (errno != EINTR){
+	fclose(write_file);
+	free(buf);
+	fprintf(stderr, "read error: %s", strerror(errno));
+	return 0;
+      }
+      continue;
+    }
+    write(file_no, buf, nread);
+    //fprintf(stderr, "%s", buf);
+    if(md5_flag && nread > 0){ //TODO: check this conditional
+      MD5_Update(&c, buf, nread);
+    }
+    num_actual_bytes += nread;
+    if(num_actual_bytes == num_expected_bytes){
+      free(buf);
+      fclose(write_file);
+      if(md5_flag){
+	MD5_Final(md5_cs, &c);
+      }
+      return 1;
+    }
+    if(nread == 0){
+      char * error = "ERROR (99): Number of bytes read not what expected\n";
+      write(connfd, error, strlen(error)+1);
+      free(buf);
+      fclose(write_file);
+      return 0;
+    }
+  }
+  return 0;
+}
+
 /*
  * file_server() - Read a request from a socket, satisfy the request, and
  *                 then close the connection.
@@ -176,7 +232,8 @@ void file_server(int connfd, int lru_size) {
     char bytesize_buf[MAX_LINE_SIZE];
     read_line(bytesize_buf, MAX_LINE_SIZE, connfd);
     //printf("%s\n", bytesize_buf);
-    if(write_file(filename_buf, bytesize_buf, connfd, 0, NULL)){
+    //Actual: if(write_file(filename_buf, bytesize_buf, connfd, 0, NULL)){
+    if(write_file("testing_check.txt", bytesize_buf, connfd, 0, NULL)){ 
       write(connfd, "OK\n", 3);
     }
   }else if(strcmp(com_buf, "GET") == 0){
@@ -186,12 +243,12 @@ void file_server(int connfd, int lru_size) {
   else if(strcmp(com_buf, "PUTC") == 0){
     char bytesize_buf[MAX_LINE_SIZE];
     read_line(bytesize_buf, MAX_LINE_SIZE, connfd);
-    //printf("%s\n", bytesize_buf);
     unsigned char md5_incoming[MD5_HASH_SIZE];
     read_line(md5_incoming, MD5_HASH_SIZE, connfd);
     //write(STDERR_FILENO, md5_incoming, MD5_HASH_SIZE);
     unsigned char * md5_buffer = malloc(MD5_HASH_SIZE);
-    if(write_file(filename_buf, bytesize_buf, connfd, 1, md5_buffer)){
+    //if(write_file(filename_buf, bytesize_buf, connfd, 1, md5_buffer)){
+    if(write_file("testing_check.txt", bytesize_buf, connfd, 1, md5_buffer)){
       fprintf(stderr, "%s\n%s\n", md5_incoming, md5_buffer);
       if(memcmp(md5_buffer, md5_incoming, MD5_HASH_SIZE) == 0){
 	write(connfd, "OKC\n", 4);
