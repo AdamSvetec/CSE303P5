@@ -160,80 +160,6 @@ void get_header(int fd, char * get_name, int check_sum_flag){
   write(fd, "\n", 1);
 }
 
-void get_file(int fd, char *get_name, char *save_name, int checksum_flag) {  
-  char response_buf [MAX_LINE_SIZE];
-  read_line(response_buf, MAX_LINE_SIZE, fd);
-  char filename_buf [MAX_LINE_SIZE];
-  read_line(filename_buf, MAX_LINE_SIZE, fd);
-  if(strcmp(filename_buf, get_name) != 0){
-    die("read error:", "file returned is not correct");
-  }
-  char bytesize_buf[MAX_LINE_SIZE];
-  read_line(bytesize_buf, MAX_LINE_SIZE, fd);
-  
-  int num_expected_bytes = atoi(bytesize_buf);
-  int num_actual_bytes = 0;
-
-  unsigned char md5_incoming[MD5_HASH_SIZE];
-  unsigned char md5_computed[MD5_HASH_SIZE];
-  if(checksum_flag){
-    read_line(md5_incoming, MD5_HASH_SIZE, fd);
-  }
-  MD5_CTX c;
-  if(checksum_flag){
-    MD5_Init(&c);
-  }
-  
-  FILE * write_file;
-  write_file = fopen(save_name, "w");
-  if(write_file == NULL){
-    // die("write error: ", strerror(errno));
-    write_file=stdout;
-  }
-  int file_no=fileno(write_file);
-  void *buf = malloc(TRANSFER_SIZE);
-  
-  // read from socket, recognizing that we may get short counts
-  size_t nread; //number of bytes read
-  while (1) {
-     bzero(buf, TRANSFER_SIZE);
-    // read some data; swallow EINTRs
-    if ((nread = read(fd, buf, TRANSFER_SIZE)) < 0) {
-      if (errno != EINTR){
-	fclose(write_file);
-	free(buf);
-	die("read error: ", strerror(errno));
-      }
-      continue;
-    }
-    // fprintf(write_file, "%s", buf);
-    write(file_no,buf,nread);
-    if(checksum_flag && nread > 0){
-      MD5_Update(&c, buf, nread);
-    }
-    num_actual_bytes += nread;
-    if(num_actual_bytes == num_expected_bytes){
-      fclose(write_file);
-      free(buf);
-      if(checksum_flag){
-	MD5_Final(md5_computed, &c);
-	fprintf(stderr, "%s\n%s\n", md5_incoming, md5_computed);
-	if(strcmp(md5_incoming, md5_computed) != 0){
-	  die("ERROR (101):", "Checksums do not match\n");
-	}
-      }
-      return;
-    }
-    if(nread == 0){
-      die("ERROR (99):", "Number of bytes read not what expected\n");
-      fclose(write_file);
-      free(buf);
-      return;
-    }
-  }
-  free(buf);
-}
-
 /*
  * main() - parse command line, open a socket, transfer a file
  */
@@ -252,33 +178,52 @@ int main(int argc, char **argv) {
     /* TODO: add additional opt flags */
     while ((opt = getopt(argc, argv, "hCs:P:G:S:p:")) != -1) {
         switch(opt) {
-          case 'h': help(argv[0]); break;
-          case 's': server = optarg; break;
-          case 'P': put_name = optarg; break;
-          case 'G': get_name = optarg; break;
-          case 'S': save_name = optarg; break;
-	  case 'C': check_sum_flag=1;break;
-	  case 'p': port = atoi(optarg); break;
+	case 'h': help(argv[0]); exit(1);break;
+	case 's': server = optarg; break;
+	case 'P': put_name = optarg; break;
+	case 'G': get_name = optarg; break;
+	case 'S': save_name = optarg; break;
+	case 'C': check_sum_flag=1;break;
+	case 'p': port = atoi(optarg); break;
         }
     }
 
     /* open a connection to the server */
     int fd = connect_to_server(server, port);
-    if(check_sum_flag==1){
 
-      //      printf("c arg worked");
-
-
-      
-    }
-    /* put or get, as appropriate */
-    if (put_name){
+    if(put_name){
       put_header(fd,put_name,check_sum_flag);
       put_file(fd, put_name);
     }
     else{
       get_header(fd,get_name, check_sum_flag);
-      get_file(fd, get_name, save_name, check_sum_flag);
+      char response_buf [MAX_LINE_SIZE];
+      read_line(response_buf, MAX_LINE_SIZE, fd);
+      if(strcmp(response_buf, "OKC") != 0 && strcmp(response_buf, "OK") != 0){
+	die("Get error: ",response_buf);
+      }
+      char filename_buf [MAX_LINE_SIZE];
+      read_line(filename_buf, MAX_LINE_SIZE, fd);
+      if(strcmp(filename_buf, get_name) != 0){
+	die("read error:", "file returned is not correct");
+      }
+      char bytesize_buf[MAX_LINE_SIZE];
+      read_line(bytesize_buf, MAX_LINE_SIZE, fd);
+      unsigned char md5_incoming[MD5_HASH_SIZE];
+      if(check_sum_flag){
+	read_line(md5_incoming, MD5_HASH_SIZE, fd);
+      }
+      unsigned char md5_cs[MD5_HASH_SIZE];      
+      if(write_file(save_name, bytesize_buf, fd, check_sum_flag, md5_cs)){
+	if(check_sum_flag){
+	  if(memcmp(md5_incoming, md5_cs, MD5_HASH_SIZE) != 0){
+	    die("ERROR (103): ", "Checksums do not match");
+	  }
+	}
+	printf("Received File Successfully\n");
+      }else{
+	die("ERROR: ", "error writing file");
+      }
     }
     /* close the socket */
     int rc;

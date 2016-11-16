@@ -85,3 +85,59 @@ int compute_md5(char * filename, unsigned char * md5_buffer){
     MD5_Update(&c, buf, nread);
   }
 }
+
+//Writes all bits recieved to new or overwritten file at filename
+int write_file(char* filename, char* numbytes, int connfd, int md5_flag, unsigned char* md5_cs){
+  FILE * write_file;
+  write_file = fopen(filename, "w");
+  if(write_file == NULL){
+    fprintf(stderr,"Write Error: %s", strerror(errno));
+    return 0;
+  }
+  int file_no = fileno(write_file);
+
+  int num_expected_bytes = atoi(numbytes);
+  int num_actual_bytes = 0;
+
+  MD5_CTX c;
+  if(md5_flag){
+    MD5_Init(&c);
+  }
+
+  void *buf = malloc(TRANSFER_SIZE);   // a place to store text from
+  size_t nread; //number of bytes read
+  while (1) {
+    bzero(buf, TRANSFER_SIZE);
+    if ((nread = read(connfd, buf, TRANSFER_SIZE)) < 0) {
+      if (errno != EINTR){
+	fclose(write_file);
+	free(buf);
+	fprintf(stderr, "read error: %s", strerror(errno));
+	return 0;
+      }
+      continue;
+    }
+    write(file_no, buf, nread);
+    //fprintf(stderr, "%s", buf);
+    if(md5_flag && nread > 0){
+      MD5_Update(&c, buf, nread);
+    }
+    num_actual_bytes += nread;
+    if(num_actual_bytes == num_expected_bytes){
+      free(buf);
+      fclose(write_file);
+      if(md5_flag){
+	MD5_Final(md5_cs, &c);
+      }
+      return 1;
+    }
+    if(nread == 0){
+      char * error = "ERROR (99): Number of bytes read not what expected\n";
+      write(connfd, error, strlen(error)+1);
+      free(buf);
+      fclose(write_file);
+      return 0;
+    }
+  }
+  return 0;
+}
