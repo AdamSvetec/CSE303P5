@@ -76,6 +76,42 @@ int connect_to_server(char *server, int port) {
     return clientfd;
 }
 
+/* computes the MD5 of a file */
+void compute_md5(char * filename, unsigned char * md5_buffer){
+  FILE * file;
+  file = fopen(filename, "r");
+  if(file == NULL){
+    die("Could not open file", strerror(errno));
+  }
+  int file_no = fileno(file);
+
+  MD5_CTX c;
+  MD5_Init(&c);
+
+  int MAXSIZE = 256;
+  void *buf = malloc(MAXSIZE);
+  size_t nread;
+  while (1) {
+    bzero(buf, MAXSIZE);
+    // read some data; swallow EINTRs
+    if ((nread = read(file_no, buf, MAXSIZE)) < 0) {
+      if (errno != EINTR){
+	fclose(file);
+	free(buf);
+	die("read error: ", strerror(errno));
+      }
+      continue;
+    }
+    if(nread == 0){
+      MD5_Final(md5_buffer, &c);
+      fclose(file);
+      free(buf);
+      return;
+    }
+    MD5_Update(&c, buf, strlen(buf));
+  }
+}
+
 /*
  * put_file() - send a file to the server accessible via the given socket fd
  */
@@ -83,8 +119,6 @@ void put_header(int fd, char* put_name,int check_sum_flag){
 
   if(check_sum_flag==1){
      write(fd, "PUTC\n", 5);
-     //TODO md5
-     printf("PUTC put");
   }
   else {
      write(fd, "PUT\n", 4);
@@ -104,6 +138,14 @@ void put_header(int fd, char* put_name,int check_sum_flag){
   sprintf(filesize,"%d", size);
   write(fd, filesize, strlen(filesize));
   write(fd, "\n", 1);
+  if(check_sum_flag==1){
+    unsigned char * md5 = malloc(16);
+    compute_md5(put_name, md5);
+    write(fd, md5, 16);
+    write(fd, "\n", 1);
+    fprintf(stderr, "%s\n", md5);
+    free(md5);
+  }
 }
   
 void put_file(int fd, char *put_name) {
@@ -174,12 +216,9 @@ void read_line(char * buffer, int bufsize, int connfd){
  * get_file() - get a file from the server accessible via the given socket
  *              fd, and save it according to the save_name
  */
-void get_header( int fd, char * get_name,int check_sum_flag){
-
+void get_header(int fd, char * get_name, int check_sum_flag){
   if(check_sum_flag==1){
     write(fd,"GETC\n",5);
-    //TODO figure out MD5 checksum here
-    printf("GETC put");
   }
   else {
     write(fd,"GET\n",4);   
@@ -187,15 +226,9 @@ void get_header( int fd, char * get_name,int check_sum_flag){
   write(fd, get_name, strlen(get_name));
   write(fd, "\n", 1);
 }
-void get_file(int fd, char *get_name, char *save_name) {
- 
-  FILE * write_file;
-  write_file = fopen(save_name, "w");
-  if(write_file == NULL){
-    // die("write error: ", strerror(errno));
-    write_file=stdout;
-  }
 
+
+void get_file(int fd, char *get_name, char *save_name, int checksum_flag) {  
   char response_buf [1024];
   read_line(response_buf, 1024, fd);
   char filename_buf [1024];
@@ -205,22 +238,29 @@ void get_file(int fd, char *get_name, char *save_name) {
   }
   char bytesize_buf[1024];
   read_line(bytesize_buf, 1024, fd);
-  //
-  int file_no=fileno(write_file);
   
-  //
   int num_expected_bytes = atoi(bytesize_buf);
   int num_actual_bytes = 0;
+
+  unsigned char md5_incoming[16];
+  unsigned char md5_computed[16];
+  if(checksum_flag){
+    read_line(md5_incoming, 16, fd);
+  }
+  MD5_CTX c;
+  if(checksum_flag){
+    MD5_Init(&c);
+  }
   
+  FILE * write_file;
+  write_file = fopen(save_name, "w");
+  if(write_file == NULL){
+    // die("write error: ", strerror(errno));
+    write_file=stdout;
+  }
+  int file_no=fileno(write_file);
   int MAXSIZE = 256;
   void *buf = malloc(MAXSIZE);
-
-  MD5_CTX *c;
-  /*  if(md5_flag){
-    MD5_init(c);
-    }*/
-     
-
   
   // read from socket, recognizing that we may get short counts
   size_t nread; //number of bytes read
@@ -237,19 +277,29 @@ void get_file(int fd, char *get_name, char *save_name) {
     }
     // fprintf(write_file, "%s", buf);
     write(file_no,buf,nread);
+    if(checksum_flag && nread != 0){
+      MD5_Update(&c, buf, nread);
+    }
     num_actual_bytes += nread;
       // end service to this client on EOF
     if(num_actual_bytes == num_expected_bytes){
       fclose(write_file);
       free(buf);
+      if(checksum_flag){
+	MD5_Final(md5_computed, &c);
+	fprintf(stderr, "%s\n%s\n", md5_incoming, md5_computed);
+	if(strcmp(md5_incoming, md5_computed) != 0){
+	  die("ERROR (101):", "Checksums do not match\n");
+	}
+      }
       return;
     }
-      if(nread == 0){
-	die("ERROR (99):", "Number of bytes read not what expected\n");
-	fclose(write_file);
-	free(buf);
-	return;
-      }
+    if(nread == 0){
+      die("ERROR (99):", "Number of bytes read not what expected\n");
+      fclose(write_file);
+      free(buf);
+      return;
+    }
   }
   free(buf);
 }
@@ -297,8 +347,8 @@ int main(int argc, char **argv) {
       put_file(fd, put_name);
     }
     else{
-        get_header(fd,get_name,check_sum_flag);
-        get_file(fd, get_name, save_name);
+      get_header(fd,get_name, check_sum_flag);
+      get_file(fd, get_name, save_name, check_sum_flag);
     }
     /* close the socket */
     int rc;
