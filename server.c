@@ -2,6 +2,7 @@
 #include "common.c"
 #include <errno.h>
 #include <fcntl.h>
+#include "lru_cache.c"
 #include <netdb.h>
 #include <netinet/in.h>
 #include <openssl/md5.h>
@@ -74,7 +75,8 @@ int open_server_socket(int port) {
  *                     to service_function.  Note that this is not a
  *                     multi-threaded server.
  */
-void handle_requests(int listenfd, void (*service_function)(int, int), int param) {
+void handle_requests(int listenfd, void (*service_function)(int), int lru_size) {
+  intialize(lru_size);
     while (1) {
         /* block until we get a connection */
         struct sockaddr_in clientaddr;
@@ -94,7 +96,7 @@ void handle_requests(int listenfd, void (*service_function)(int, int), int param
         printf("server connected to %s (%s)\n", hp->h_name, haddrp);
 
         /* serve requests */
-        service_function(connfd, param);
+        service_function(connfd);
 
         /* clean up, await new connection */
         if (close(connfd) < 0)
@@ -161,9 +163,9 @@ void get_file(char * filename, int connfd){
  * file_server() - Read a request from a socket, satisfy the request, and
  *                 then close the connection.
  */
-void file_server(int connfd, int lru_size) {
-  /* TODO: set up a few static variables here to manage the LRU cache of
-     files */
+void file_server(int connfd) {
+
+  //TODO: check for cache hit/miss
   
   // GET COMMAND FOR PUT OR GET
   char com_buf[MAX_LINE_SIZE];   // a place to store text from the client
@@ -233,9 +235,9 @@ int main(int argc, char **argv) {
     /* and 'l' for lru cache size.  'h' is also supported. */
     while ((opt = getopt(argc, argv, "hl:p:")) != -1) {
         switch(opt) {
-          case 'h': help(argv[0]); break;
-          case 'l': lru_size = atoi(argv[0]); break;
-          case 'p': port = atoi(optarg); break;
+	case 'h': help(argv[0]); exit(1); break;
+	case 'l': lru_size = atoi(argv[0]); break;
+	case 'p': port = atoi(optarg); break;
         }
     }
 

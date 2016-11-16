@@ -49,7 +49,7 @@ void insert(cache_file cf){
     }
   }
   int lru=find_lru();
-  mywrap.files[lru]=cf;
+  my_wrap.files[lru]=cf;
   return;
 }
 /*
