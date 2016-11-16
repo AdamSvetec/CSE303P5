@@ -1,5 +1,5 @@
-
 #include <arpa/inet.h>
+#include "common.c"
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -76,47 +76,10 @@ int connect_to_server(char *server, int port) {
     return clientfd;
 }
 
-/* computes the MD5 of a file */
-void compute_md5(char * filename, unsigned char * md5_buffer){
-  FILE * file;
-  file = fopen(filename, "r");
-  if(file == NULL){
-    die("Could not open file", strerror(errno));
-  }
-  int file_no = fileno(file);
-
-  MD5_CTX c;
-  MD5_Init(&c);
-
-  int MAXSIZE = 256;
-  void *buf = malloc(MAXSIZE);
-  size_t nread;
-  while (1) {
-    bzero(buf, MAXSIZE);
-    // read some data; swallow EINTRs
-    if ((nread = read(file_no, buf, MAXSIZE)) < 0) {
-      if (errno != EINTR){
-	fclose(file);
-	free(buf);
-	die("read error: ", strerror(errno));
-      }
-      continue;
-    }
-    if(nread == 0){
-      MD5_Final(md5_buffer, &c);
-      fclose(file);
-      free(buf);
-      return;
-    }
-    MD5_Update(&c, buf, strlen(buf));
-  }
-}
-
 /*
  * put_file() - send a file to the server accessible via the given socket fd
  */
 void put_header(int fd, char* put_name,int check_sum_flag){
-
   if(check_sum_flag==1){
      write(fd, "PUTC\n", 5);
   }
@@ -139,11 +102,11 @@ void put_header(int fd, char* put_name,int check_sum_flag){
   write(fd, filesize, strlen(filesize));
   write(fd, "\n", 1);
   if(check_sum_flag==1){
-    unsigned char * md5 = malloc(16);
+    unsigned char * md5 = malloc(MD5_HASH_SIZE);
     compute_md5(put_name, md5);
-    write(fd, md5, 16);
+    write(fd, md5, MD5_HASH_SIZE);
     write(fd, "\n", 1);
-    fprintf(stderr, "%s\n", md5);
+    write(STDERR_FILENO, md5, MD5_HASH_SIZE);
     free(md5);
   }
 }
@@ -156,11 +119,10 @@ void put_file(int fd, char *put_name) {
   }
   int file_no = fileno(my_file);
 
-  int MAXSIZE = 256;
-  void *buffer = malloc(MAXSIZE);
-  int nread = read(file_no, buffer, MAXSIZE);
+  void *buffer = malloc(TRANSFER_SIZE);
+  int nread = read(file_no, buffer, TRANSFER_SIZE);
   void * ptr;
-  while(nread != 0){
+  while(nread > 0){
     int nsofar = 0;
     int nremain = nread;
     ptr = buffer;
@@ -173,43 +135,14 @@ void put_file(int fd, char *put_name) {
       nremain -= nsofar;
       ptr += nsofar;
     }
-    nread = read(file_no, buffer, MAXSIZE);//see above
+    nread = read(file_no, buffer, TRANSFER_SIZE);//see above
   }
   fclose(my_file);
-
+  free(buffer);
+  
   char read_buffer[1024];
   read(fd, read_buffer, 1023);
   printf("RECIEVED: %s\n", read_buffer);
-}
-
-/* Reads single line of input from socket, leaving rest in the socket */
-void read_line(char * buffer, int bufsize, int connfd){
-  bzero(buffer, bufsize);
-
-  /* read from socket, recognizing that we may get short counts */
-  char *bufp = buffer;          /* current pointer into buffer */
-  ssize_t nremain = bufsize; /* max characters we can still read*/
-  size_t nsofar;                 /* characters read so far */
-  while (1) {
-    /* read some data; swallow EINTRs */
-    if ((nsofar = read(connfd, bufp, 1)) < 0) {
-      if (errno != EINTR)
-	die("read error: ", strerror(errno));
-      continue;
-    }
-    /* end service to this client on EOF */
-    if (nsofar == 0) {
-      fprintf(stderr, "received EOF\n");
-      return;
-    }
-    /* update pointer for next bit of reading */
-    bufp += nsofar;
-    nremain -= nsofar;
-    if (*(bufp-1) == '\n') {
-      *(bufp-1) = 0;
-      break;
-    }
-  }
 }
 
 /*
@@ -227,25 +160,24 @@ void get_header(int fd, char * get_name, int check_sum_flag){
   write(fd, "\n", 1);
 }
 
-
 void get_file(int fd, char *get_name, char *save_name, int checksum_flag) {  
-  char response_buf [1024];
-  read_line(response_buf, 1024, fd);
-  char filename_buf [1024];
-  read_line(filename_buf, 1024, fd);
+  char response_buf [MAX_LINE_SIZE];
+  read_line(response_buf, MAX_LINE_SIZE, fd);
+  char filename_buf [MAX_LINE_SIZE];
+  read_line(filename_buf, MAX_LINE_SIZE, fd);
   if(strcmp(filename_buf, get_name) != 0){
     die("read error:", "file returned is not correct");
   }
-  char bytesize_buf[1024];
-  read_line(bytesize_buf, 1024, fd);
+  char bytesize_buf[MAX_LINE_SIZE];
+  read_line(bytesize_buf, MAX_LINE_SIZE, fd);
   
   int num_expected_bytes = atoi(bytesize_buf);
   int num_actual_bytes = 0;
 
-  unsigned char md5_incoming[16];
-  unsigned char md5_computed[16];
+  unsigned char md5_incoming[MD5_HASH_SIZE];
+  unsigned char md5_computed[MD5_HASH_SIZE];
   if(checksum_flag){
-    read_line(md5_incoming, 16, fd);
+    read_line(md5_incoming, MD5_HASH_SIZE, fd);
   }
   MD5_CTX c;
   if(checksum_flag){
@@ -259,15 +191,14 @@ void get_file(int fd, char *get_name, char *save_name, int checksum_flag) {
     write_file=stdout;
   }
   int file_no=fileno(write_file);
-  int MAXSIZE = 256;
-  void *buf = malloc(MAXSIZE);
+  void *buf = malloc(TRANSFER_SIZE);
   
   // read from socket, recognizing that we may get short counts
   size_t nread; //number of bytes read
   while (1) {
-     bzero(buf, MAXSIZE);
+     bzero(buf, TRANSFER_SIZE);
     // read some data; swallow EINTRs
-    if ((nread = read(fd, buf, MAXSIZE)) < 0) {
+    if ((nread = read(fd, buf, TRANSFER_SIZE)) < 0) {
       if (errno != EINTR){
 	fclose(write_file);
 	free(buf);
