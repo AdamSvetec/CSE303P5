@@ -28,6 +28,34 @@ cache_file * create_cache_file(char * filename, void * file_contents, struct tim
   return file;
 }
 
+cache_file * create_from_disk_file(char * filename){
+  FILE * file;
+  file=fopen(filename, "r");
+  if(file==NULL){
+    fprintf(stderr, "Could not open file\n");
+    return NULL;
+  }
+  int file_no = fileno(file);
+  
+  fseek(file, 0, SEEK_END);
+  int file_size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+  
+  void *file_contents = malloc(file_size);
+  int nread = read(file_no, file_contents, file_size);
+  int nremain = file_size - nread;
+  void * ptr = file_contents;
+  while(nread > 0){
+    ptr+=nread;
+    nremain -= nread;
+    nread = read(file_no, ptr, nremain);
+  }
+  fclose(file);
+  struct timeval curr;
+  gettimeofday(&curr,NULL);
+  return create_cache_file(filename, file_contents, curr); 
+}
+
 typedef struct{
   cache_file ** files;
   int size;
