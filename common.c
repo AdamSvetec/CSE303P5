@@ -5,6 +5,10 @@
 #include <string.h>
 #include <stddef.h>
 #include <unistd.h>
+#include <openssl/pem.h>
+
+#define PUB_KEY_FILE "public.pem"
+#define PRIV_KEY_FILE "private.pem"
 
 #define TRANSFER_SIZE 256
 #define MAX_LINE_SIZE 1024
@@ -84,6 +88,32 @@ int compute_md5(char * filename, unsigned char * md5_buffer){
     }
     MD5_Update(&c, buf, nread);
   }
+}
+
+RSA * get_pub_rsa(){
+  FILE * key = fopen(PUB_KEY_FILE, "r");
+  if(key == NULL){
+    fprintf(stderr, "Could not open public key file\n");
+    return NULL;
+  }
+  RSA * rsa = PEM_read_RSA_PUBKEY(key, NULL, NULL, NULL);
+  if(rsa == NULL){
+    fprintf(stderr, "RSA key is null\n");
+  }
+  return rsa;
+}
+
+RSA * get_priv_rsa(){
+  FILE * key = fopen(PRIV_KEY_FILE, "r");
+  if(key == NULL){
+    fprintf(stderr, "Could not open public key file\n");
+    return NULL;
+  }
+  RSA * rsa = PEM_read_RSAPrivateKey(key, NULL, NULL, NULL);
+  if(rsa == NULL){
+    fprintf(stderr, "RSA key is null\n");
+  }
+  return rsa;
 }
 
 //Writes all bits recieved to new or overwritten file at filename
