@@ -36,23 +36,24 @@ cache_file * create_from_disk_file(char * filename){
     return NULL;
   }
   int file_no = fileno(file);
-  
   fseek(file, 0, SEEK_END);
   int file_size = ftell(file);
   fseek(file, 0, SEEK_SET);
-  
-  void *file_contents = malloc(file_size);
+  //  fprintf(stderr,"%d\n",file_size);
+  void * file_contents = malloc(file_size);
+  bzero(file_contents,file_size);
   int nread = read(file_no, file_contents, file_size);
-  int nremain = file_size - nread;
-  void * ptr = file_contents;
-  while(nread > 0){
-    ptr+=nread;
-    nremain -= nread;
-    nread = read(file_no, ptr, nremain);
+  if(nread < 0){
+    fprintf(stderr, "Error on read\n");
+    fclose(file);
+    return NULL;
   }
   fclose(file);
   struct timeval curr;
   gettimeofday(&curr,NULL);
+  fprintf(stderr,"gothere");
+  write(STDOUT_FILENO, file_contents, file_size);
+  fprintf(stderr,"Hello: %s\n", (char *)file_contents);
   return create_cache_file(filename, file_contents, curr); 
 }
 
@@ -100,7 +101,7 @@ int find_lru(){
   }
   return oldest_index; 
 }
-
+/*
 void insert(cache_file *cf){
   for( int i=0;i<my_wrap.size; i++){
     if(my_wrap.files[i] == NULL){
@@ -111,4 +112,6 @@ void insert(cache_file *cf){
   int lru=find_lru();
   delete_cache_file(my_wrap.files[lru]);
   my_wrap.files[lru] = cf;
+  // fprintf(stderr,"%d\n",lru);
 }
+*/
