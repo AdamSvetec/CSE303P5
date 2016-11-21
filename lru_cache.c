@@ -15,7 +15,8 @@ void delete_cache_file(cache_file* file){
   }
   if(file->file_contents != NULL){
     free(file->file_contents);
-  }
+    }
+  //TODO FIX THIS, Why isn't index changing properly?
   free(file);
   file = NULL;
 }
@@ -51,6 +52,7 @@ cache_file * create_from_disk_file(char * filename){
   fclose(file);
   struct timeval curr;
   gettimeofday(&curr,NULL);
+  fprintf(stderr,"%s\n",file_contents);
   return create_cache_file(filename, file_contents, curr); 
 }
 
@@ -103,6 +105,7 @@ void insert(cache_file *cf){
   for(int i=0;i<my_wrap.size; i++){
     if(my_wrap.files[i] == NULL){
       my_wrap.files[i] = cf;
+        printf("It worked and lru is index: %d\n",i);
       return;
     }
   }
@@ -110,4 +113,5 @@ void insert(cache_file *cf){
   int lru=find_lru();
   delete_cache_file(my_wrap.files[lru]);
   my_wrap.files[lru] = cf;
+  printf("It worked and lru is index: %d\n",lru);
 }

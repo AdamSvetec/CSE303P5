@@ -180,6 +180,11 @@ void file_server(int connfd) {
     //printf("%s\n", bytesize_buf);
     //Actual: if(write_file(filename_buf, bytesize_buf, connfd, 0, NULL)){
     if(write_file("testing_check.txt", bytesize_buf, connfd, 0, NULL)){ 
+      //add to lru_cache,currently testing check for testing purposes
+       cache_file *new_cf=create_from_disk_file("testing_check.txt");
+       insert(new_cf);
+      fprintf(stderr, "%s\n",new_cf->filename);
+      //
       write(connfd, "OK\n", 3);
     }
   }else if(strcmp(com_buf, "GET") == 0){
@@ -197,6 +202,10 @@ void file_server(int connfd) {
     if(write_file("testing_check.txt", bytesize_buf, connfd, 1, md5_buffer)){
       fprintf(stderr, "%s\n%s\n", md5_incoming, md5_buffer);
       if(memcmp(md5_buffer, md5_incoming, MD5_HASH_SIZE) == 0){
+	//add to lru_cache
+	// cache_file *new_cf=create_from_disk_file("testing_check.txt");
+	 // insert(new_cf);
+	//
 	write(connfd, "OKC\n", 4);
       }else{
 	write(connfd, "ERROR (102): Checksum does not match\n", 37);
@@ -236,7 +245,7 @@ int main(int argc, char **argv) {
     while ((opt = getopt(argc, argv, "hl:p:")) != -1) {
         switch(opt) {
 	case 'h': help(argv[0]); exit(1); break;
-	case 'l': lru_size = atoi(argv[0]); break;
+	case 'l': lru_size = atoi(optarg); break;
 	case 'p': port = atoi(optarg); break;
         }
     }
