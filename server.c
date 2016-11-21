@@ -181,7 +181,7 @@ void file_server(int connfd) {
     //Actual: if(write_file(filename_buf, bytesize_buf, connfd, 0, NULL)){
     if(write_file("testing_check.txt", bytesize_buf, connfd, 0, NULL)){ 
       //add to lru_cache,currently testing check for testing purposes
-       cache_file *new_cf=create_from_disk_file("testing_check.txt");
+      cache_file *new_cf=create_from_disk_file("testing_check.txt");
        insert(new_cf);
       fprintf(stderr, "%s\n",new_cf->filename);
       //
@@ -203,8 +203,8 @@ void file_server(int connfd) {
       fprintf(stderr, "%s\n%s\n", md5_incoming, md5_buffer);
       if(memcmp(md5_buffer, md5_incoming, MD5_HASH_SIZE) == 0){
 	//add to lru_cache
-	// cache_file *new_cf=create_from_disk_file("testing_check.txt");
-	 // insert(new_cf);
+	cache_file *new_cf=create_from_disk_file("testing_check.txt");
+	insert(new_cf);
 	//
 	write(connfd, "OKC\n", 4);
       }else{
