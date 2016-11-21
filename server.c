@@ -179,18 +179,28 @@ void file_server(int connfd) {
     read_line(bytesize_buf, MAX_LINE_SIZE, connfd);
     //printf("%s\n", bytesize_buf);
     //Actual: if(write_file(filename_buf, bytesize_buf, connfd, 0, NULL)){
-    if(write_file("testing_check.txt", bytesize_buf, connfd, 0, NULL)){ 
+    if(write_file(filename_buf, bytesize_buf, connfd, 0, NULL)){ 
       //add to lru_cache,currently testing check for testing purposes
-      cache_file *new_cf=create_from_disk_file("testing_check.txt");
-       insert(new_cf);
-      fprintf(stderr, "%s\n",new_cf->filename);
+      cache_file *new_cf=create_from_disk_file(filename_buf);
+      insert(new_cf);
+      //      fprintf(stderr, "%s\n",new_cf->filename);
       //
       write(connfd, "OK\n", 3);
     }
   }else if(strcmp(com_buf, "GET") == 0){
     send_get_header("OK",filename_buf, connfd);
-    get_file(filename_buf, connfd);
+    cache_file *c_file=get(filename_buf);
+    //fprintf(stderr,"filename_buf: %s\n",filename_buf);
+    if(c_file==NULL){
+      // fprintf(stderr,"getting from disk");
+       get_file(filename_buf, connfd);
+    }
+    else{
+      //fprintf(stderr,"getting from cache");
+       get_from_cache(c_file,connfd);
+    }
   }
+  
   else if(strcmp(com_buf, "PUTC") == 0){
     char bytesize_buf[MAX_LINE_SIZE];
     read_line(bytesize_buf, MAX_LINE_SIZE, connfd);
@@ -199,11 +209,11 @@ void file_server(int connfd) {
     //write(STDERR_FILENO, md5_incoming, MD5_HASH_SIZE);
     unsigned char * md5_buffer = malloc(MD5_HASH_SIZE);
     //if(write_file(filename_buf, bytesize_buf, connfd, 1, md5_buffer)){
-    if(write_file("testing_check.txt", bytesize_buf, connfd, 1, md5_buffer)){
-      fprintf(stderr, "%s\n%s\n", md5_incoming, md5_buffer);
+    if(write_file(filename_buf, bytesize_buf, connfd, 1, md5_buffer)){
+      // fprintf(stderr, "%s\n%s\n", md5_incoming, md5_buffer);
       if(memcmp(md5_buffer, md5_incoming, MD5_HASH_SIZE) == 0){
 	//add to lru_cache
-	cache_file *new_cf=create_from_disk_file("testing_check.txt");
+	cache_file *new_cf=create_from_disk_file(filename_buf);
 	insert(new_cf);
 	//
 	write(connfd, "OKC\n", 4);
@@ -216,11 +226,21 @@ void file_server(int connfd) {
   else if(strcmp(com_buf, "GETC") == 0){
     unsigned char *md5_buf = malloc(MD5_HASH_SIZE);
     compute_md5(filename_buf, md5_buf); 
-    fprintf(stderr, "%s\n", md5_buf);
+    // fprintf(stderr, "%s\n", md5_buf);
     send_get_header("OKC",filename_buf, connfd);
     write(connfd, md5_buf, MD5_HASH_SIZE);
     write(connfd, "\n", 1);
-    get_file(filename_buf, connfd);
+    cache_file *c_file=get(filename_buf);
+
+    // fprintf(stderr,"filename_buf: %s\n",filename_buf);
+    if(c_file==NULL){
+      // fprintf(stderr,"getting from disk");
+       get_file(filename_buf, connfd);
+    }
+    else{
+      //fprintf(stderr,"getting from cache");
+       get_from_cache(c_file,connfd);
+    }
     free(md5_buf);
   }
   else{

@@ -3,6 +3,7 @@
 typedef struct{
   char * filename;
   void * file_contents;
+  int file_size;
   struct timeval time_of_use;
 }cache_file;
 
@@ -16,16 +17,35 @@ void delete_cache_file(cache_file* file){
   if(file->file_contents != NULL){
     free(file->file_contents);
     }
-  //TODO FIX THIS, Why isn't index changing properly?
+
   free(file);
   file = NULL;
 }
 
-cache_file * create_cache_file(char * filename, void * file_contents, struct timeval time_of_use){
+void get_from_cache(cache_file * c_file,int connfd){
+
+  void *ptr=c_file->file_contents;
+  int nsofar = 0;
+  int nremain = c_file->file_size;
+  
+  while (nremain > 0) {
+    if ((nsofar = write(connfd, ptr, nremain)) <= 0) {
+      if (errno != EINTR){
+	fprintf(stderr, "Error with write\n");
+	return;
+      }
+    }
+    nremain -= nsofar;
+    ptr += nsofar;
+  }
+}
+  
+cache_file * create_cache_file(char * filename, void * file_contents, int size, struct timeval time_of_use){
   cache_file* file = malloc(sizeof(cache_file));
   file->filename = filename;
   file->file_contents = file_contents;
   file->time_of_use = time_of_use;
+  file->file_size=size;
   return file;
 }
 
@@ -39,8 +59,11 @@ cache_file * create_from_disk_file(char * filename){
   int file_no = fileno(file);
   fseek(file, 0, SEEK_END);
   int file_size = ftell(file);
-  fseek(file, 0, SEEK_SET);
+  fclose(file);
 
+  file=fopen(filename,"r");
+  file_no=fileno(file);
+  
   void * file_contents = malloc(file_size);
   bzero(file_contents,file_size);
   int nread = read(file_no, file_contents, file_size);
@@ -52,10 +75,10 @@ cache_file * create_from_disk_file(char * filename){
   fclose(file);
   struct timeval curr;
   gettimeofday(&curr,NULL);
-  write(STDOUT_FILENO, file_contents, file_size);
+  //  write(STDOUT_FILENO, file_contents, file_size);
   char * filename_copy = malloc(strlen(filename)+1);
   strcpy(filename_copy, filename);
-  return create_cache_file(filename_copy, file_contents, curr); 
+  return create_cache_file(filename_copy, file_contents,file_size, curr); 
 }
 
 typedef struct{
@@ -104,19 +127,19 @@ int find_lru(){
 
 void insert(cache_file *cf){
   //TODO: add
-  /*for(int i=0;i<my_wrap.size; i++){
+  for(int i=0;i<my_wrap.size; i++){
     if(my_wrap.files[i] != NULL && strcmp(cf->filename, my_wrap.files[i]->filename) == 0){
       delete_cache_file(my_wrap.files[i]);
       my_wrap.files[i] = cf;
-      printf("It worked replacing index: %d\n", i);
+      //  printf("It worked replacing index: %d\n", i);
       return;
     }
-    }*/
+  }
 
   for(int i=0;i<my_wrap.size; i++){
     if(my_wrap.files[i] == NULL){
       my_wrap.files[i] = cf;
-        printf("It worked and lru is index: %d\n",i);
+      // printf("It worked and lru is index: %d\n",i);
       return;
     }
   }
@@ -124,5 +147,5 @@ void insert(cache_file *cf){
   int lru=find_lru();
   delete_cache_file(my_wrap.files[lru]);
   my_wrap.files[lru] = cf;
-  printf("It worked and lru is index: %d\n",lru);
+  //printf("It worked and lru is index: %d\n",lru);
 }
