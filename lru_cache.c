@@ -52,8 +52,10 @@ cache_file * create_from_disk_file(char * filename){
   fclose(file);
   struct timeval curr;
   gettimeofday(&curr,NULL);
-  fprintf(stderr,"%s\n",file_contents);
-  return create_cache_file(filename, file_contents, curr); 
+  write(STDOUT_FILENO, file_contents, file_size);
+  char * filename_copy = malloc(strlen(filename));
+  strcpy(filename_copy, filename);
+  return create_cache_file(filename_copy, file_contents, curr); 
 }
 
 typedef struct{
