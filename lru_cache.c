@@ -53,7 +53,7 @@ cache_file * create_from_disk_file(char * filename){
   struct timeval curr;
   gettimeofday(&curr,NULL);
   write(STDOUT_FILENO, file_contents, file_size);
-  char * filename_copy = malloc(strlen(filename));
+  char * filename_copy = malloc(strlen(filename)+1);
   strcpy(filename_copy, filename);
   return create_cache_file(filename_copy, file_contents, curr); 
 }
@@ -92,10 +92,9 @@ int find_lru(){
   int oldest_index = -1;
   for( int i=0; i<my_wrap.size; i++){
     if(my_wrap.files[i] != NULL){
-      struct timeval a= my_wrap.files[i]->time_of_use; 
-      struct timeval b= oldest;
-      if(timercmp(&a, &b,<)){
-	struct timeval oldest= my_wrap.files[i]->time_of_use;
+      struct timeval a= my_wrap.files[i]->time_of_use;
+      if(timercmp(&a, &oldest, <)){
+	oldest= my_wrap.files[i]->time_of_use;
 	oldest_index=i;
       }
     }
@@ -104,6 +103,16 @@ int find_lru(){
 }
 
 void insert(cache_file *cf){
+  //TODO: add
+  /*for(int i=0;i<my_wrap.size; i++){
+    if(my_wrap.files[i] != NULL && strcmp(cf->filename, my_wrap.files[i]->filename) == 0){
+      delete_cache_file(my_wrap.files[i]);
+      my_wrap.files[i] = cf;
+      printf("It worked replacing index: %d\n", i);
+      return;
+    }
+    }*/
+
   for(int i=0;i<my_wrap.size; i++){
     if(my_wrap.files[i] == NULL){
       my_wrap.files[i] = cf;
