@@ -39,7 +39,7 @@ cache_file * create_from_disk_file(char * filename){
   fseek(file, 0, SEEK_END);
   int file_size = ftell(file);
   fseek(file, 0, SEEK_SET);
-  //  fprintf(stderr,"%d\n",file_size);
+
   void * file_contents = malloc(file_size);
   bzero(file_contents,file_size);
   int nread = read(file_no, file_contents, file_size);
@@ -51,9 +51,6 @@ cache_file * create_from_disk_file(char * filename){
   fclose(file);
   struct timeval curr;
   gettimeofday(&curr,NULL);
-  fprintf(stderr,"gothere");
-  write(STDOUT_FILENO, file_contents, file_size);
-  fprintf(stderr,"Hello: %s\n", (char *)file_contents);
   return create_cache_file(filename, file_contents, curr); 
 }
 
@@ -101,17 +98,16 @@ int find_lru(){
   }
   return oldest_index; 
 }
-/*
+
 void insert(cache_file *cf){
-  for( int i=0;i<my_wrap.size; i++){
+  for(int i=0;i<my_wrap.size; i++){
     if(my_wrap.files[i] == NULL){
       my_wrap.files[i] = cf;
       return;
     }
   }
+
   int lru=find_lru();
   delete_cache_file(my_wrap.files[lru]);
   my_wrap.files[lru] = cf;
-  // fprintf(stderr,"%d\n",lru);
 }
-*/
