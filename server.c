@@ -75,8 +75,12 @@ int open_server_socket(int port) {
  *                     to service_function.  Note that this is not a
  *                     multi-threaded server.
  */
-void handle_requests(int listenfd, void (*service_function)(int), int lru_size) {
-  intialize(lru_size);
+void handle_requests(int listenfd, void (*service_function)(int, int), int lru_size) {
+  int lru_flag = 0;
+  if(lru_size > 0){
+    lru_flag = 1;
+    intialize(lru_size);
+  }
     while (1) {
         /* block until we get a connection */
         struct sockaddr_in clientaddr;
@@ -96,7 +100,7 @@ void handle_requests(int listenfd, void (*service_function)(int), int lru_size) 
         printf("server connected to %s (%s)\n", hp->h_name, haddrp);
 
         /* serve requests */
-        service_function(connfd);
+        service_function(connfd, lru_flag);
 
         /* clean up, await new connection */
         if (close(connfd) < 0)
@@ -163,10 +167,8 @@ void get_file(char * filename, int connfd){
  * file_server() - Read a request from a socket, satisfy the request, and
  *                 then close the connection.
  */
-void file_server(int connfd) {
+void file_server(int connfd, int lru_flag) {
 
-  //TODO: check for cache hit/miss
-  
   // GET COMMAND FOR PUT OR GET
   char com_buf[MAX_LINE_SIZE];   // a place to store text from the client
   read_line(com_buf, MAX_LINE_SIZE, connfd);
@@ -178,21 +180,23 @@ void file_server(int connfd) {
     char bytesize_buf[MAX_LINE_SIZE];
     read_line(bytesize_buf, MAX_LINE_SIZE, connfd);
     //printf("%s\n", bytesize_buf);
-    //Actual: if(write_file(filename_buf, bytesize_buf, connfd, 0, NULL)){
-    if(write_file(filename_buf, bytesize_buf, connfd, 0, NULL)){ 
-      //add to lru_cache,currently testing check for testing purposes
-      cache_file *new_cf=create_from_disk_file(filename_buf);
-      insert(new_cf);
-      //      fprintf(stderr, "%s\n",new_cf->filename);
-      //
+    if(write_file(filename_buf, bytesize_buf, connfd, 0, NULL)){
+      if(lru_flag){
+	cache_file *new_cf=create_from_disk_file(filename_buf);
+	insert(new_cf);
+      }
+      //fprintf(stderr, "%s\n",new_cf->filename);
       write(connfd, "OK\n", 3);
     }
   }else if(strcmp(com_buf, "GET") == 0){
     send_get_header("OK",filename_buf, connfd);
-    cache_file *c_file=get(filename_buf);
+    cache_file *c_file=NULL;
+    if(lru_flag){
+      c_file = get(filename_buf);
+    }
     //fprintf(stderr,"filename_buf: %s\n",filename_buf);
     if(c_file==NULL){
-      // fprintf(stderr,"getting from disk");
+      //fprintf(stderr,"getting from disk");
        get_file(filename_buf, connfd);
     }
     else{
@@ -200,7 +204,6 @@ void file_server(int connfd) {
        get_from_cache(c_file,connfd);
     }
   }
-  
   else if(strcmp(com_buf, "PUTC") == 0){
     char bytesize_buf[MAX_LINE_SIZE];
     read_line(bytesize_buf, MAX_LINE_SIZE, connfd);
@@ -208,14 +211,14 @@ void file_server(int connfd) {
     read_line(md5_incoming, MD5_HASH_SIZE, connfd);
     //write(STDERR_FILENO, md5_incoming, MD5_HASH_SIZE);
     unsigned char * md5_buffer = malloc(MD5_HASH_SIZE);
-    //if(write_file(filename_buf, bytesize_buf, connfd, 1, md5_buffer)){
     if(write_file(filename_buf, bytesize_buf, connfd, 1, md5_buffer)){
       // fprintf(stderr, "%s\n%s\n", md5_incoming, md5_buffer);
       if(memcmp(md5_buffer, md5_incoming, MD5_HASH_SIZE) == 0){
 	//add to lru_cache
-	cache_file *new_cf=create_from_disk_file(filename_buf);
-	insert(new_cf);
-	//
+	if(lru_flag){
+	  cache_file *new_cf=create_from_disk_file(filename_buf);
+	  insert(new_cf);
+	}
 	write(connfd, "OKC\n", 4);
       }else{
 	write(connfd, "ERROR (102): Checksum does not match\n", 37);
@@ -230,8 +233,10 @@ void file_server(int connfd) {
     send_get_header("OKC",filename_buf, connfd);
     write(connfd, md5_buf, MD5_HASH_SIZE);
     write(connfd, "\n", 1);
-    cache_file *c_file=get(filename_buf);
-
+    cache_file *c_file=NULL;
+    if(lru_flag){
+      c_file = get(filename_buf);
+    }
     // fprintf(stderr,"filename_buf: %s\n",filename_buf);
     if(c_file==NULL){
       // fprintf(stderr,"getting from disk");
