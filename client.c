@@ -182,6 +182,7 @@ void put_file(int fd, char *put_name, int encrypt_flag) {
   free(buffer);
 
   char read_buffer[1024];
+  bzero(read_buffer, 1024);
   read(fd, read_buffer, 1023);
   printf("RECEIVED: %s\n", read_buffer);
 }

@@ -11,7 +11,7 @@
 #define PRIV_KEY_FILE "private.pem"
 #define PADDING RSA_PKCS1_PADDING
 
-#define TRANSFER_SIZE 256/8
+#define TRANSFER_SIZE 256
 #define MAX_LINE_SIZE 1024
 #define MD5_HASH_SIZE 16
 
