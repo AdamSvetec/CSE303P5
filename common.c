@@ -9,6 +9,7 @@
 
 #define PUB_KEY_FILE "public.pem"
 #define PRIV_KEY_FILE "private.pem"
+#define PADDING RSA_PKCS1_PADDING
 
 #define TRANSFER_SIZE 256
 #define MAX_LINE_SIZE 1024
@@ -96,7 +97,8 @@ RSA * get_pub_rsa(){
     fprintf(stderr, "Could not open public key file\n");
     return NULL;
   }
-  RSA * rsa = PEM_read_RSA_PUBKEY(key, NULL, NULL, NULL);
+  RSA * rsa = RSA_new();
+  rsa = PEM_read_RSA_PUBKEY(key, &rsa, NULL, NULL);
   if(rsa == NULL){
     fprintf(stderr, "RSA key is null\n");
   }
@@ -109,7 +111,8 @@ RSA * get_priv_rsa(){
     fprintf(stderr, "Could not open public key file\n");
     return NULL;
   }
-  RSA * rsa = PEM_read_RSAPrivateKey(key, NULL, NULL, NULL);
+  RSA * rsa = RSA_new();
+  rsa = PEM_read_RSAPrivateKey(key, &rsa, NULL, NULL);
   if(rsa == NULL){
     fprintf(stderr, "RSA key is null\n");
   }
@@ -117,7 +120,7 @@ RSA * get_priv_rsa(){
 }
 
 //Writes all bits recieved to new or overwritten file at filename
-int write_file(char* filename, char* numbytes, int connfd, int md5_flag, unsigned char* md5_cs){
+int write_file(char* filename, char* numbytes, int connfd, int md5_flag, unsigned char* md5_cs, int decrypt_flag){
   FILE * write_file;
   write_file = fopen(filename, "w");
   if(write_file == NULL){
@@ -134,11 +137,19 @@ int write_file(char* filename, char* numbytes, int connfd, int md5_flag, unsigne
     MD5_Init(&c);
   }
 
-  void *buf = malloc(TRANSFER_SIZE);   // a place to store text from
+  int READ_SIZE = TRANSFER_SIZE;
+  RSA * rsa;
+  if(decrypt_flag){
+    rsa = get_priv_rsa();
+    READ_SIZE = RSA_size(rsa);
+  }
+  void *buf = malloc(READ_SIZE);   // a place to store text from
+  void * copy_buf = malloc(READ_SIZE);
+  
   size_t nread; //number of bytes read
   while (1) {
-    bzero(buf, TRANSFER_SIZE);
-    if ((nread = read(connfd, buf, TRANSFER_SIZE)) < 0) {
+    bzero(buf, READ_SIZE);
+    if ((nread = read(connfd, buf, READ_SIZE)) < 0) {
       if (errno != EINTR){
 	fclose(write_file);
 	free(buf);
@@ -147,8 +158,14 @@ int write_file(char* filename, char* numbytes, int connfd, int md5_flag, unsigne
       }
       continue;
     }
-    write(file_no, buf, nread);
-    //fprintf(stderr, "%s", buf);
+    int nwrite = nread;
+    if(decrypt_flag){
+      nwrite = RSA_private_decrypt(nread,buf,copy_buf,rsa,PADDING);
+    }else{
+      memcpy(copy_buf, buf, nread);
+    }
+    write(file_no, copy_buf, nwrite);
+    //write(STDERR_FILENO, copy_buf, nwrite);
     if(md5_flag && nread > 0){
       MD5_Update(&c, buf, nread);
     }

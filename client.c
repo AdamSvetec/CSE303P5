@@ -76,10 +76,34 @@ int connect_to_server(char *server, int port) {
     return clientfd;
 }
 
+int encrypted_file_size(char * filename){
+  FILE * file = fopen(filename, "r");
+  if(file == NULL){
+    die("Could not open file: ", strerror(errno));
+  }
+  int file_no = fileno(file);
+  
+  RSA * rsa = get_pub_rsa();
+
+  int RSA_SIZE = RSA_size(rsa);
+  void * buffer = malloc(RSA_SIZE/8);
+  void * encrypted = malloc(RSA_SIZE);
+  int total_size = 0;
+  int nread = read(file_no, buffer, RSA_SIZE/8);
+  while(nread > 0){
+    int size = RSA_public_encrypt(nread,buffer,encrypted,rsa,PADDING);
+    //fprintf(stderr, "Read size: %d\n", size);
+    total_size+= size;
+    nread = read(file_no, buffer, RSA_SIZE/8);
+  }
+  fclose(file);
+  return total_size;
+}
+
 /*
  * put_file() - send a file to the server accessible via the given socket fd
  */
-void put_header(int fd, char* put_name,int check_sum_flag){
+void put_header(int fd, char* put_name,int check_sum_flag, int encrypt_flag){
   if(check_sum_flag==1){
      write(fd, "PUTC\n", 5);
   }
@@ -95,8 +119,12 @@ void put_header(int fd, char* put_name,int check_sum_flag){
   }
   fseek(my_file, 0, SEEK_END);
   int size = ftell(my_file);
-  fseek(my_file, 0, SEEK_SET);
   fclose(my_file);
+
+  if(encrypt_flag){
+    size = encrypted_file_size(put_name);
+  }
+  
   char filesize [1024];
   sprintf(filesize,"%d", size);
   write(fd, filesize, strlen(filesize));
@@ -111,7 +139,7 @@ void put_header(int fd, char* put_name,int check_sum_flag){
   }
 }
   
-void put_file(int fd, char *put_name) {
+void put_file(int fd, char *put_name, int encrypt_flag) {
   FILE * my_file;
   my_file=fopen(put_name, "r");
   if(my_file==NULL){
@@ -119,13 +147,26 @@ void put_file(int fd, char *put_name) {
   }
   int file_no = fileno(my_file);
 
-  void *buffer = malloc(TRANSFER_SIZE);
-  int nread = read(file_no, buffer, TRANSFER_SIZE);
+  int READ_SIZE = TRANSFER_SIZE;
+  RSA * rsa;
+  if(encrypt_flag){
+    rsa = get_pub_rsa();
+    READ_SIZE = RSA_size(rsa)/8;
+  }
+  
+  void *buffer = malloc(READ_SIZE);
+  void *copy_buffer = malloc(READ_SIZE*8);
+  int nread = read(file_no, buffer, READ_SIZE);
   void * ptr;
   while(nread > 0){
     int nsofar = 0;
+    if(encrypt_flag){
+      nread = RSA_public_encrypt(nread,buffer,copy_buffer,rsa,PADDING);
+    }else{
+      memcpy(copy_buffer, buffer, nread);
+    }
     int nremain = nread;
-    ptr = buffer;
+    ptr = copy_buffer;
     while (nremain > 0) {     
       if ((nsofar = write(fd, ptr, nremain)) <= 0) {
 	if (errno != EINTR)
@@ -135,7 +176,7 @@ void put_file(int fd, char *put_name) {
       nremain -= nsofar;
       ptr += nsofar;
     }
-    nread = read(file_no, buffer, TRANSFER_SIZE);//see above
+    nread = read(file_no, buffer, READ_SIZE);//see above
   }
   fclose(my_file);
   free(buffer);
@@ -172,11 +213,12 @@ int main(int argc, char **argv) {
     int   port;
     char *save_name = NULL;
     int check_sum_flag=0;
+    int encrypt_flag=0;
     check_team(argv[0]);
 
     /* parse the command-line options. */
     /* TODO: add additional opt flags */
-    while ((opt = getopt(argc, argv, "hCs:P:G:S:p:")) != -1) {
+    while ((opt = getopt(argc, argv, "heCs:P:G:S:p:")) != -1) {
         switch(opt) {
 	case 'h': help(argv[0]); exit(1);break;
 	case 's': server = optarg; break;
@@ -185,15 +227,16 @@ int main(int argc, char **argv) {
 	case 'S': save_name = optarg; break;
 	case 'C': check_sum_flag=1;break;
 	case 'p': port = atoi(optarg); break;
-        }
+	case 'e': encrypt_flag = 1; break;
+	}
     }
 
     /* open a connection to the server */
     int fd = connect_to_server(server, port);
 
     if(put_name){
-      put_header(fd,put_name,check_sum_flag);
-      put_file(fd, put_name);
+      put_header(fd,put_name,check_sum_flag, encrypt_flag);
+      put_file(fd, put_name, encrypt_flag);
     }
     else{
       get_header(fd,get_name, check_sum_flag);
@@ -214,7 +257,7 @@ int main(int argc, char **argv) {
 	read_line(md5_incoming, MD5_HASH_SIZE, fd);
       }
       unsigned char md5_cs[MD5_HASH_SIZE];      
-      if(write_file(save_name, bytesize_buf, fd, check_sum_flag, md5_cs)){
+      if(write_file(save_name, bytesize_buf, fd, check_sum_flag, md5_cs, encrypt_flag)){
 	if(check_sum_flag){
 	  if(memcmp(md5_incoming, md5_cs, MD5_HASH_SIZE) != 0){
 	    die("ERROR (103): ", "Checksums do not match");

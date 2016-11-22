@@ -180,7 +180,7 @@ void file_server(int connfd, int lru_flag) {
     char bytesize_buf[MAX_LINE_SIZE];
     read_line(bytesize_buf, MAX_LINE_SIZE, connfd);
     //printf("%s\n", bytesize_buf);
-    if(write_file(filename_buf, bytesize_buf, connfd, 0, NULL)){
+    if(write_file(filename_buf, bytesize_buf, connfd, 0, NULL, 0)){
       if(lru_flag){
 	cache_file *new_cf=create_from_disk_file(filename_buf);
 	insert(new_cf);
@@ -211,7 +211,7 @@ void file_server(int connfd, int lru_flag) {
     read_line(md5_incoming, MD5_HASH_SIZE, connfd);
     //write(STDERR_FILENO, md5_incoming, MD5_HASH_SIZE);
     unsigned char * md5_buffer = malloc(MD5_HASH_SIZE);
-    if(write_file(filename_buf, bytesize_buf, connfd, 1, md5_buffer)){
+    if(write_file(filename_buf, bytesize_buf, connfd, 1, md5_buffer, 0)){
       // fprintf(stderr, "%s\n%s\n", md5_incoming, md5_buffer);
       if(memcmp(md5_buffer, md5_incoming, MD5_HASH_SIZE) == 0){
 	//add to lru_cache
