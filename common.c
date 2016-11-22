@@ -15,6 +15,38 @@
 #define MAX_LINE_SIZE 1024
 #define MD5_HASH_SIZE 16
 
+
+
+RSA * get_pub_rsa(){
+  FILE * key = fopen(PUB_KEY_FILE, "r");
+  if(key == NULL){
+    fprintf(stderr, "Could not open public key file\n");
+    return NULL;
+  }
+  RSA * rsa = RSA_new();
+  rsa = PEM_read_RSA_PUBKEY(key, &rsa, NULL, NULL);
+  if(rsa == NULL){
+    fprintf(stderr, "RSA key is null\n");
+  }
+  return rsa;
+}
+
+RSA * get_priv_rsa(){
+  FILE * key = fopen(PRIV_KEY_FILE, "r");
+  if(key == NULL){
+    fprintf(stderr, "Could not open public key file\n");
+    return NULL;
+  }
+  RSA * rsa = RSA_new();
+  rsa = PEM_read_RSAPrivateKey(key, &rsa, NULL, NULL);
+  if(rsa == NULL){
+    fprintf(stderr, "RSA key is null\n");
+  }
+  return rsa;
+}
+
+
+
 /* Reads single line of input from socket, leaving rest in the socket */
 int read_line(char * buffer, int bufsize, int connfd){
 
@@ -50,7 +82,7 @@ int read_line(char * buffer, int bufsize, int connfd){
 }
 
 /* computes the MD5 of a file */
-int compute_md5(char * filename, unsigned char * md5_buffer){
+int compute_md5(char * filename, unsigned char * md5_buffer, int encrypt_flag){
   if(md5_buffer != NULL){
     free(md5_buffer);
   }
@@ -67,12 +99,20 @@ int compute_md5(char * filename, unsigned char * md5_buffer){
   MD5_CTX c;
   MD5_Init(&c);
 
-  void *buf = malloc(TRANSFER_SIZE);
+  RSA * rsa;
+  int READ_SIZE=TRANSFER_SIZE;
+  if(encrypt_flag){
+    rsa=get_pub_rsa();
+    READ_SIZE=RSA_size(rsa)/8;
+  }
+  void *buf = malloc(READ_SIZE);
+  void * encrypted_buf=malloc(8*READ_SIZE);
+  
   size_t nread;
   while (1) {
-    bzero(buf, TRANSFER_SIZE);
+    bzero(buf, READ_SIZE);
     // read some data; swallow EINTRs
-    if ((nread = read(file_no, buf, TRANSFER_SIZE)) < 0) {
+    if ((nread = read(file_no, buf,READ_SIZE)) < 0) {
       if (errno != EINTR){
 	fclose(file);
 	free(buf);
@@ -87,36 +127,14 @@ int compute_md5(char * filename, unsigned char * md5_buffer){
       free(buf);
       return 1;
     }
-    MD5_Update(&c, buf, nread);
+    if(encrypt_flag){
+      nread=RSA_public_encrypt(nread,buf,encrypted_buf,rsa,PADDING);
+      MD5_Update(&c,encrypted_buf,nread);
+    }
+    else{
+      MD5_Update(&c, buf, nread);
+    }
   }
-}
-
-RSA * get_pub_rsa(){
-  FILE * key = fopen(PUB_KEY_FILE, "r");
-  if(key == NULL){
-    fprintf(stderr, "Could not open public key file\n");
-    return NULL;
-  }
-  RSA * rsa = RSA_new();
-  rsa = PEM_read_RSA_PUBKEY(key, &rsa, NULL, NULL);
-  if(rsa == NULL){
-    fprintf(stderr, "RSA key is null\n");
-  }
-  return rsa;
-}
-
-RSA * get_priv_rsa(){
-  FILE * key = fopen(PRIV_KEY_FILE, "r");
-  if(key == NULL){
-    fprintf(stderr, "Could not open public key file\n");
-    return NULL;
-  }
-  RSA * rsa = RSA_new();
-  rsa = PEM_read_RSAPrivateKey(key, &rsa, NULL, NULL);
-  if(rsa == NULL){
-    fprintf(stderr, "RSA key is null\n");
-  }
-  return rsa;
 }
 
 //Writes all bits recieved to new or overwritten file at filename

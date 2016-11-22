@@ -228,7 +228,8 @@ void file_server(int connfd, int lru_flag) {
   }
   else if(strcmp(com_buf, "GETC") == 0){
     unsigned char *md5_buf = malloc(MD5_HASH_SIZE);
-    compute_md5(filename_buf, md5_buf); 
+    compute_md5(filename_buf, md5_buf,0);//0 accounts for encrypt flag
+					 //paramet in common 
     // fprintf(stderr, "%s\n", md5_buf);
     send_get_header("OKC",filename_buf, connfd);
     write(connfd, md5_buf, MD5_HASH_SIZE);

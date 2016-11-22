@@ -131,7 +131,7 @@ void put_header(int fd, char* put_name,int check_sum_flag, int encrypt_flag){
   write(fd, "\n", 1);
   if(check_sum_flag==1){
     unsigned char * md5 = malloc(MD5_HASH_SIZE);
-    compute_md5(put_name, md5);
+    compute_md5(put_name, md5,encrypt_flag);
     write(fd, md5, MD5_HASH_SIZE);
     write(fd, "\n", 1);
     //write(STDERR_FILENO, md5, MD5_HASH_SIZE);
